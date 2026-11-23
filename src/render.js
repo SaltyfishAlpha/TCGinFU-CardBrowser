@@ -21,7 +21,7 @@ function safeJson(obj) {
 
 function renderHtml(model) {
   const labels = {
-    category: L.category, kind: L.kind, color: L.color, element: L.element, shieldKind: L.shieldKind,
+    category: L.category, play: L.play, role: L.role, cardTargeting: L.cardTargeting, color: L.color, element: L.element, shieldKind: L.shieldKind,
     target: L.target, row: L.row, rank: L.rank, affinity: L.affinity, targeting: L.targeting, hook: L.hook,
   };
   const tpl = fs.readFileSync(path.join(WEB, 'index.html'), 'utf8');
@@ -32,6 +32,15 @@ function renderHtml(model) {
     .replace('/*__CSS__*/', () => css)
     .replace('/*__DATA__*/', () => safeJson({ ...model, labels }))
     .replace('/*__JS__*/', () => js.replace(/<\/script/gi, '<\\/script'));
+}
+
+/** 「形态牌 · 时机」「升变牌」「技能」：标记和打法是两个维度，显示时拼在一起 */
+function kindText(c) {
+  const parts = [];
+  if (c.role && c.role !== 'Normal') parts.push(L.t(L.role, c.role));
+  if (c.play) parts.push(L.t(L.play, c.play));
+  if (c.hero) parts.push('英雄技能');
+  return parts.join(' · ');
 }
 
 function charName(model, id) {
@@ -70,10 +79,10 @@ function renderMarkdown(model) {
     for (const cl of classes) {
       out.push(`### ${cl}`);
       out.push('');
-      out.push('| 卡名 | 类别 | 种类 | 颜色 | AP | MP | 暴击 | 卡面文字 |');
+      out.push('| 卡名 | 类别 | 标记 · 打法 | 颜色 | AP | MP | 暴击 | 卡面文字 |');
       out.push('|---|---|---|---|--:|--:|:-:|---|');
       for (const c of cs.filter((x) => (x.classId || '（无职业）') === cl)) {
-        out.push(`| **${mdEscape(c.name)}** | ${L.t(L.category, c.category)} | ${L.t(L.kind, c.kind)} | ${c.colors.map((x) => L.t(L.color, x)).join('+') || '无色'} | ${c.ap} | ${c.mp} | ${c.hasCrit ? '✓' : ''} | ${mdEscape(c.rulesText)} |`);
+        out.push(`| **${mdEscape(c.name)}** | ${L.t(L.category, c.category)} | ${kindText(c)} | ${c.colors.map((x) => L.t(L.color, x)).join('+') || '无色'} | ${c.ap} | ${c.mp} | ${c.hasCrit ? '✓' : ''} | ${mdEscape(c.rulesText)} |`);
       }
       out.push('');
       for (const c of cs.filter((x) => (x.classId || '（无职业）') === cl)) {
@@ -124,9 +133,9 @@ function csvCell(v) {
 }
 
 function renderCsv(model) {
-  const head = ['id', '卡名', '角色', '职业', '类别', '种类', '颜色', 'AP', 'MP', '充能', '暴击', '卡面文字', '数据效果', 'Lua钩子', '卡组张数', '问题数', '文件'];
+  const head = ['id', '卡名', '角色', '职业', '类别', '标记 · 打法', '颜色', 'AP', 'MP', '充能', '暴击', '卡面文字', '数据效果', 'Lua钩子', '卡组张数', '问题数', '文件'];
   const rows = model.cards.map((c) => [
-    c.id, c.name, charName(model, c.owner), c.classId, L.t(L.category, c.category), L.t(L.kind, c.kind),
+    c.id, c.name, charName(model, c.owner), c.classId, L.t(L.category, c.category), kindText(c),
     c.colors.map((x) => L.t(L.color, x)).join('+'), c.ap, c.mp, c.charge, c.hasCrit ? '是' : '',
     c.rulesText, c.effectTexts.join('；'), c.hooks.join(' '),
     c.decks.reduce((a, d) => a + d.count, 0),

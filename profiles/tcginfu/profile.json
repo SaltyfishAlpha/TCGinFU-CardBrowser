@@ -5,7 +5,10 @@
 
   "enums": {
     "category": { "Class": "职业牌", "Armor": "防具", "Weapon": "武器", "Treasure": "宝物" },
-    "kind": { "Form": "形态牌", "Transform": "升变", "Skill": "技能", "Timing": "时机", "Continuous": "持续" },
+    "$comment_play": "规则书 §7.1（2026-11-23 修订）：打法只有三种；升变牌 / 形态牌是打法之外的标记，见 role",
+    "play": { "Skill": "技能", "Timing": "时机", "Continuous": "持续" },
+    "role": { "Transform": "升变牌", "Form": "形态牌" },
+    "cardTargeting": { "Auto": "自动", "None": "不指定", "Enemy": "敌人", "Ally": "队友" },
     "color": { "Might": "力量", "Dexterity": "敏捷", "Insight": "洞察", "Willpower": "意志" },
     "element": {
       "Physical": "物理", "Dark": "暗", "Light": "光", "Fire": "火", "Ice": "冰", "Lightning": "雷",
@@ -45,13 +48,20 @@
       "newBehaviour": "id",
       "editable": true,
       "newFile": [
-        { "when": { "kind": "Form" }, "file": "cards/forms.json" },
+        { "when": { "role": "Form" }, "file": "cards/forms.json" },
         { "file": "cards/{owner}.json" }
       ],
       "fieldOrder": [
-        "id", "name", "owner", "category", "kind", "classId", "colors", "ap", "mp", "charge", "hasCrit",
-        "rulesText", "behaviourId", "effects", "formId", "armorBaseShield", "shieldKind", "weaponBaseDamage",
-        "twoHanded", "unmapped", "art"
+        "id", "name", "owner", "category", "role", "play", "classId", "colors", "ap", "mp", "charge", "chargeOptions",
+        "hasCrit", "hero", "rulesText", "behaviourId", "effects", "formId", "armorBaseShield", "shieldKind",
+        "weaponBaseDamage", "twoHanded", "unmapped", "art", "targeting"
+      ],
+      "rules": [
+        { "field": "play", "must": "absent", "when": { "role": "Transform" }, "message": "升变牌不按打法结算，「打法」要留空" },
+        { "field": "play", "must": "present", "unless": { "role": "Transform" }, "message": "除了升变牌，每张牌都要填「打法」（技能 / 时机 / 持续）" },
+        { "field": "formId", "must": "present", "when": { "role": "Form" }, "message": "形态牌要填「所属形态」，否则不知道它属于哪一组形态卡组" },
+        { "field": "formId", "must": "absent", "unless": { "role": "Form" }, "message": "只有形态牌才能填「所属形态」" },
+        { "field": "kind", "must": "absent", "message": "kind 字段已废弃（2026-11-23 拆成「打法」和「标记」），引擎不再读它" }
       ],
       "columns": [
         { "field": "id", "header": "id", "type": "id", "width": 24, "pattern": "^[a-z][a-z0-9_]*$" },
@@ -59,12 +69,16 @@
         { "field": "owner", "header": "角色", "type": "enum", "enum": "owner", "required": true, "width": 9 },
         { "field": "classId", "header": "职业", "type": "string", "suggest": true, "width": 10 },
         { "field": "category", "header": "类别", "type": "enum", "enum": "category", "required": true, "width": 9 },
-        { "field": "kind", "header": "种类", "type": "enum", "enum": "kind", "required": true, "width": 9 },
+        { "field": "role", "header": "标记", "type": "enum", "enum": "role", "width": 9, "blankMeans": "普通牌" },
+        { "field": "play", "header": "打法", "type": "enum", "enum": "play", "width": 8 },
         { "field": "colors", "header": "颜色", "type": "list", "enum": "color", "default": [], "width": 12 },
         { "field": "ap", "header": "AP", "type": "int", "default": 0, "width": 6 },
         { "field": "mp", "header": "MP", "type": "int", "default": 0, "width": 6 },
         { "field": "charge", "header": "充能", "type": "int", "default": 0, "width": 6 },
+        { "field": "chargeOptions", "header": "可选充能", "type": "list", "itemType": "int", "separator": ",", "width": 9 },
         { "field": "hasCrit", "header": "暴击", "type": "bool", "default": false, "width": 6 },
+        { "field": "hero", "header": "英雄技能", "type": "bool", "width": 8 },
+        { "field": "targeting", "header": "指定目标", "type": "enum", "enum": "cardTargeting", "width": 9 },
         { "field": "rulesText", "header": "卡面文字", "type": "text", "required": true, "width": 60 },
         { "field": "behaviourId", "header": "Lua行为", "type": "behaviour", "width": 22 },
         { "field": "formId", "header": "所属形态", "type": "string", "width": 12 },
@@ -86,7 +100,8 @@
             { "field": "amount.times", "header": "次数", "type": "int", "width": 6 },
             { "field": "element", "header": "属性", "type": "enum", "enum": "element", "width": 8 },
             { "field": "target", "header": "目标", "type": "enum", "enum": "target", "width": 10 },
-            { "field": "shieldKind", "header": "护盾类型", "type": "enum", "enum": "shieldKind", "width": 9 }
+            { "field": "shieldKind", "header": "护盾类型", "type": "enum", "enum": "shieldKind", "width": 9 },
+            { "field": "playerChoosesSlot", "header": "排内自选", "type": "bool", "width": 8 }
           ]
         }
       ],
@@ -107,7 +122,10 @@
       "newBehaviour": "none",
       "editable": true,
       "newFile": [{ "file": "statuses.json" }],
-      "fieldOrder": ["id", "name", "rulesText", "behaviourId"],
+      "fieldOrder": [
+        "id", "name", "rulesText", "incomingDamageBonus", "outgoingDamageBonus", "vulnerableElement", "critResistDelta",
+        "incomingMultiplier", "consumedOnTrigger", "negative", "behaviourId"
+      ],
       "columns": [
         { "field": "id", "header": "id", "type": "id", "width": 24, "pattern": "^[a-z][a-z0-9_]*$" },
         { "field": "name", "header": "名称", "type": "string", "required": true, "width": 14 },
@@ -116,7 +134,10 @@
         { "field": "negative", "header": "负面", "type": "bool", "width": 6 },
         { "field": "consumedOnTrigger", "header": "触发后消耗", "type": "bool", "width": 9 },
         { "field": "incomingDamageBonus", "header": "受伤加成", "type": "int", "width": 8 },
-        { "field": "outgoingDamageBonus", "header": "伤害加成", "type": "int", "width": 8 }
+        { "field": "outgoingDamageBonus", "header": "伤害加成", "type": "int", "width": 8 },
+        { "field": "vulnerableElement", "header": "易损属性", "type": "enum", "enum": "element", "width": 8 },
+        { "field": "critResistDelta", "header": "暴击抵抗变化", "type": "int", "width": 10 },
+        { "field": "incomingMultiplier", "header": "受伤倍率(分子/分母)", "type": "list", "itemType": "int", "separator": "/", "width": 10 }
       ]
     },
     { "key": "characters", "label": "角色", "manifestKey": "characters", "arrayKey": "characters", "idField": "id", "nameField": "name" },
@@ -129,7 +150,7 @@
     "registerCall": "behaviour",
     "stubFile": [
       { "collection": "statuses", "file": "scripts/statuses.lua" },
-      { "when": { "kind": "Form" }, "file": "scripts/forms.lua" },
+      { "when": { "role": "Form" }, "file": "scripts/forms.lua" },
       { "file": "scripts/{owner}.lua" }
     ],
     "newFileHeader": [

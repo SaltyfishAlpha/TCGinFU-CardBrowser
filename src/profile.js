@@ -102,6 +102,7 @@ function otherFields(obj, columns, exclude = []) {
 function resolveEnums(profile, collections) {
   const out = {};
   for (const [name, def] of Object.entries(profile.enums || {})) {
+    if (name.startsWith('$') || !def || typeof def !== 'object') continue; // $comment 之类
     if (def && def.$from) {
       const src = collections[def.$from.collection];
       const m = {};
@@ -138,8 +139,10 @@ function parseCell(col, raw, enums) {
   switch (col.type) {
     case 'int':
     case 'number': {
-      const n = typeof str === 'number' ? str : Number(String(str).trim().replace(/^＋/, '+').replace(/[，,]/g, ''));
-      if (!Number.isFinite(n)) return { error: `「${raw}」不是数字` };
+      // 不去掉逗号：「3,2」可能是千分位，也可能是两个数，猜错就是静默改数据，宁可报错
+      const s = typeof str === 'number' ? null : String(str).trim().replace(/^＋/, '+');
+      const n = s === null ? str : s === '' || /[^0-9+\-.eE]/.test(s) ? NaN : Number(s);
+      if (!Number.isFinite(n)) return { error: `「${raw}」不是一个数字` };
       if (col.type === 'int' && !Number.isInteger(n)) return { error: `「${raw}」应该是整数` };
       return { value: n };
     }
@@ -156,7 +159,17 @@ function parseCell(col, raw, enums) {
       return r.ok ? { value: r.value } : { error: `「${raw}」不在「${col.header}」的可选值里（${Object.values(map).join('、')}）` };
     }
     case 'list': {
+      // Excel 会把单独一个「1」存成数字
       const parts = String(str).split(/[+＋,，、/／\n]/).map((s) => s.trim()).filter(Boolean);
+      if (col.itemType === 'int' || col.itemType === 'number') {
+        const out = [];
+        for (const p of parts) {
+          const n = Number(p);
+          if (!Number.isFinite(n) || (col.itemType === 'int' && !Number.isInteger(n))) return { error: `「${p}」不是${col.itemType === 'int' ? '整数' : '数字'}（多个值用逗号隔开，比如 0,1）` };
+          out.push(n);
+        }
+        return { value: out };
+      }
       if (!col.enum) return { value: parts };
       const map = enums[col.enum] || {};
       const out = [];
@@ -185,17 +198,42 @@ function formatCell(col, value, enums) {
     case 'number': return typeof value === 'number' ? value : String(value);
     case 'bool': return value ? '是' : '否';
     case 'enum': return (enums[col.enum] || {})[value] ?? String(value);
-    case 'list': return Array.isArray(value) ? value.map((v) => (col.enum ? (enums[col.enum] || {})[v] ?? v : v)).join('+') : String(value);
+    case 'list': return Array.isArray(value) ? value.map((v) => (col.enum ? (enums[col.enum] || {})[v] ?? v : v)).join(col.separator || '+') : String(value);
     case 'json': return JSON.stringify(value);
     default: return typeof value === 'object' ? JSON.stringify(value) : String(value);
   }
 }
 
-/** 规则列表里挑第一条匹配的：[{ when: {kind:'Form'}, collection?, file }] */
+/** 条件对象：{ role: 'Form' } 表示 role 等于 Form；值写 null 表示字段不存在 */
+function matchesWhen(obj, cond) {
+  return Object.entries(cond).every(([k, v]) => {
+    const cur = getPath(obj, k);
+    return v === null ? cur === undefined || cur === null || cur === '' : cur === v;
+  });
+}
+
+/**
+ * 按 profile 的 rules 检查一项，返回违反的规则说明列表。
+ * rule: { field, must: 'present' | 'absent', when?: {…}, unless?: {…}, message }
+ */
+function checkRules(rules, obj) {
+  const out = [];
+  for (const r of rules || []) {
+    if (r.when && !matchesWhen(obj, r.when)) continue;
+    if (r.unless && matchesWhen(obj, r.unless)) continue;
+    const v = getPath(obj, r.field);
+    const present = !(v === undefined || v === null || v === '' || (Array.isArray(v) && v.length === 0));
+    if (r.must === 'present' && !present) out.push(r);
+    if (r.must === 'absent' && present) out.push(r);
+  }
+  return out;
+}
+
+/** 规则列表里挑第一条匹配的：[{ when: {role:'Form'}, collection?, file }] */
 function pickRule(rules, obj, collectionKey) {
   for (const r of rules || []) {
     if (r.collection && r.collection !== collectionKey) continue;
-    if (r.when && !Object.entries(r.when).every(([k, v]) => getPath(obj, k) === v)) continue;
+    if (r.when && !matchesWhen(obj, r.when)) continue;
     return r;
   }
   return null;
@@ -219,5 +257,5 @@ function orderKeys(obj, order) {
 
 module.exports = {
   loadProfile, getPath, hasPath, setPath, deletePath, otherFields, resolveEnums, parseEnum, parseCell, formatCell,
-  pickRule, fillTemplate, orderKeys,
+  pickRule, fillTemplate, orderKeys, checkRules, matchesWhen,
 };

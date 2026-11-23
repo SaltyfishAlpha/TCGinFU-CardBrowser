@@ -93,6 +93,14 @@
     return (e ? `<span class="tag err">✕ ${e}</span>` : '') + (w ? `<span class="tag warn">! ${w}</span>` : '');
   }
 
+  function kindText(c) {
+    const parts = [];
+    if (c.role && c.role !== 'Normal') parts.push(lab(L.role, c.role));
+    if (c.play) parts.push(lab(L.play, c.play));
+    if (c.hero) parts.push('英雄技能');
+    return parts.join(' · ');
+  }
+
   const entityLink = (type, id, text) => `<button class="entity-link" data-open="${esc(type)}:${esc(id)}">${esc(text || id)}</button>`;
 
   // ───────────── 状态 ─────────────
@@ -101,7 +109,7 @@
     q: '',
     view: store.get('view', 'grid'),
     groupBy: store.get('groupBy', 'owner'),
-    filters: { owner: new Set(), category: new Set(), kind: new Set(), classId: new Set(), color: new Set(), ap: new Set(), problem: new Set() },
+    filters: { owner: new Set(), category: new Set(), role: new Set(), play: new Set(), classId: new Set(), color: new Set(), ap: new Set(), problem: new Set() },
     sort: { key: null, asc: true },
     drawer: null, // "card:id"
   };
@@ -110,7 +118,8 @@
     { key: 'owner', label: '角色', get: (c) => [c.owner], name: ownerName },
     { key: 'classId', label: '职业', get: (c) => [c.classId], name: (v) => v || '（无）' },
     { key: 'category', label: '类别', get: (c) => [c.category], name: (v) => lab(L.category, v) },
-    { key: 'kind', label: '种类', get: (c) => [c.kind], name: (v) => lab(L.kind, v) },
+    { key: 'role', label: '标记', get: (c) => [c.role], name: (v) => lab(L.role, v) },
+    { key: 'play', label: '打法', get: (c) => [c.play || ''], name: (v) => (v ? lab(L.play, v) : '无（升变牌）') },
     { key: 'color', label: '颜色', get: (c) => (c.colors.length ? c.colors : ['']), name: (v) => (v ? lab(L.color, v) : '无色') },
     { key: 'ap', label: 'AP', get: (c) => [String(c.ap)], name: (v) => `${v} AP` },
     {
@@ -133,7 +142,7 @@
 
   function matchesQuery(c, q) {
     if (!q) return true;
-    const hay = [c.name, c.id, c.rulesText, c.classId, ownerName(c.owner), lab(L.kind, c.kind), lab(L.category, c.category), ...c.effectTexts, ...c.hooks].join('\n').toLowerCase();
+    const hay = [c.name, c.id, c.rulesText, c.classId, ownerName(c.owner), kindText(c), lab(L.category, c.category), ...c.effectTexts, ...c.hooks].join('\n').toLowerCase();
     return hay.includes(q.toLowerCase());
   }
 
@@ -171,7 +180,7 @@
     const costs = [`<span class="ap">${c.ap} AP</span>`];
     if (c.mp) costs.push(`<span>${c.mp} MP</span>`);
     if (c.charge) costs.push(`<span>充能 ${c.charge}</span>`);
-    const meta = [ownerName(c.owner), c.classId, lab(L.category, c.category), lab(L.kind, c.kind)].filter(Boolean);
+    const meta = [ownerName(c.owner), c.classId, lab(L.category, c.category), kindText(c)].filter(Boolean);
     return `<button class="tile" data-open="card:${esc(c.id)}">
       ${stripe(c.colors)}
       <div class="tile-head"><div class="tile-name">${highlight(esc(c.name), S.q)}</div><div class="cost">${costs.join('')}</div></div>
@@ -191,7 +200,8 @@
     owner: { label: '按角色', key: (c) => c.owner || '', name: ownerName },
     classId: { label: '按职业', key: (c) => c.classId || '', name: (v) => v || '（无职业）' },
     category: { label: '按类别', key: (c) => c.category || '', name: (v) => lab(L.category, v) },
-    kind: { label: '按种类', key: (c) => c.kind || '', name: (v) => lab(L.kind, v) },
+    role: { label: '按标记', key: (c) => c.role || 'Normal', name: (v) => lab(L.role, v) },
+    play: { label: '按打法', key: (c) => c.play || '', name: (v) => (v ? lab(L.play, v) : '无打法（升变牌）') },
   };
 
   const COLUMNS = [
@@ -199,7 +209,8 @@
     { key: 'owner', label: '角色', val: (c) => ownerName(c.owner), cls: 'nowrap' },
     { key: 'classId', label: '职业', val: (c) => c.classId, cls: 'nowrap' },
     { key: 'category', label: '类别', val: (c) => lab(L.category, c.category), cls: 'nowrap' },
-    { key: 'kind', label: '种类', val: (c) => lab(L.kind, c.kind), cls: 'nowrap' },
+    { key: 'role', label: '标记', val: (c) => (c.role === 'Normal' ? '' : lab(L.role, c.role)), cls: 'nowrap' },
+    { key: 'play', label: '打法', val: (c) => lab(L.play, c.play), cls: 'nowrap' },
     { key: 'colors', label: '颜色', val: (c) => c.colors.map((x) => lab(L.color, x)).join('+'), cls: 'nowrap' },
     { key: 'ap', label: 'AP', val: (c) => c.ap, cls: 'num' },
     { key: 'mp', label: 'MP', val: (c) => c.mp, cls: 'num' },
@@ -275,7 +286,7 @@
         const rows = s.cards.map((x) => {
           const c = cardById.get(x.card);
           if (!c) return `<div class="deck-row"><span class="cnt">×${x.count}</span><span class="nm" style="color:var(--err)">找不到「${esc(x.card)}」</span></div>`;
-          return `<div class="deck-row" data-open="card:${esc(c.id)}"><span class="cnt">×${x.count}</span><span class="dot" style="background:${colorVar(c.colors[0])}"></span><span class="nm">${esc(c.name)}</span><span class="k">${esc(lab(L.kind, c.kind))} · ${c.ap} AP${c.mp ? ` · ${c.mp} MP` : ''}</span>${issueTags(cardIssues(c))}</div>`;
+          return `<div class="deck-row" data-open="card:${esc(c.id)}"><span class="cnt">×${x.count}</span><span class="dot" style="background:${colorVar(c.colors[0])}"></span><span class="nm">${esc(c.name)}</span><span class="k">${esc(kindText(c))} · ${c.ap} AP${c.mp ? ` · ${c.mp} MP` : ''}</span>${issueTags(cardIssues(c))}</div>`;
         }).join('');
         return `<h3>${esc(s.title)}<span class="n">${total} 张 · ${s.cards.length} 种</span></h3><div class="bar">${bar}</div>${rows}`;
       }).join('')).join('');
@@ -374,6 +385,7 @@
     'character-missing-deck': ['角色引用了不存在的卡组', ''],
     'deck-missing-card': ['卡组引用了不存在的卡', ''],
     'intent-missing': ['意图池引用了不存在的意图', ''],
+    'rule': ['不符合内容包规则', '引擎加载时会报错或忽略的写法（规则来自 profile.json 的 rules，与 ContentLoader 一致）。'],
     'no-behaviour-id': ['没有 behaviourId', '只有数据效果的卡。通常没问题，列出来供核对。'],
     'behaviour-pending': ['Lua 待实现', '卡牌表导入时生成了占位，等 agent 按卡面实现。任务单在 dist/agent-tasks.md。'],
     'not-in-deck': ['不在任何卡组里', '可能是备选卡，也可能是漏放了。'],
@@ -461,10 +473,13 @@
   function drawerCard(c) {
     const b = c.behaviourId ? behaviourById.get(c.behaviourId) : null;
     const kv = [
-      ['角色', ownerName(c.owner)], ['职业', c.classId], ['类别', lab(L.category, c.category)], ['种类', lab(L.kind, c.kind)],
+      ['角色', ownerName(c.owner)], ['职业', c.classId], ['类别', lab(L.category, c.category)], ['标记', lab(L.role, c.role)], ['打法', c.play ? lab(L.play, c.play) : '无（升变牌不按打法结算）'],
       ['颜色', c.colors.map((x) => lab(L.color, x)).join(' + ') || '无色'], ['AP', c.ap], ['MP', c.mp], ['充能', c.charge],
       ['暴击', c.hasCrit ? '是' : '否'],
     ];
+    if (c.hero) kv.push(['英雄技能', '是']);
+    if (c.targeting) kv.push(['指定目标', lab(L.cardTargeting, c.targeting)]);
+    if (c.chargeOptions) kv.push(['可选充能', c.chargeOptions.join(' / ')]);
     if (c.formId) kv.push(['所属形态', c.formId]);
     if (c.armorBaseShield != null) kv.push(['基础护盾', `${c.armorBaseShield}${c.shieldKind ? ' ' + lab(L.shieldKind, c.shieldKind) : ''}`]);
     if (c.weaponBaseDamage != null) kv.push(['基础伤害', c.weaponBaseDamage]);

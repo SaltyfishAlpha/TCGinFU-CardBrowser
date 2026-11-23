@@ -100,7 +100,7 @@ function build(paths) {
   require('./src/labels').applyProfile(profile);
   const content = loadContent(paths.contentDir, { lua: profile.lua });
   const engineHooks = findEngineHooks(paths.engineDir);
-  const model = buildModel(content, { engineHooks });
+  const model = buildModel(content, { engineHooks, profile });
   return model;
 }
 

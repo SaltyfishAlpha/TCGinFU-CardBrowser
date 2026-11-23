@@ -2,7 +2,10 @@
 // 把内容包里的英文枚举翻成策划看得懂的中文。没收录的值原样显示，不会报错。
 
 const category = { Class: '职业牌', Armor: '防具', Weapon: '武器', Treasure: '宝物' };
-const kind = { Form: '形态牌', Transform: '升变', Skill: '技能', Timing: '时机', Continuous: '持续' };
+// 规则书 §7.1（2026-11-23）：打法只有三种，升变牌 / 形态牌是打法之外的标记
+const play = { Skill: '技能', Timing: '时机', Continuous: '持续' };
+const role = { Normal: '普通牌', Transform: '升变牌', Form: '形态牌', EnemyIntent: '敌人意图' };
+const cardTargeting = { Auto: '自动', None: '不指定', Enemy: '敌人', Ally: '队友' };
 const color = { Might: '力量', Dexterity: '敏捷', Insight: '洞察', Willpower: '意志' };
 const element = {
   Physical: '物理', Dark: '暗', Light: '光', Fire: '火', Ice: '冰', Lightning: '雷',
@@ -116,7 +119,7 @@ function effectSentence(e) {
 }
 
 module.exports = {
-  category, kind, color, element, shieldKind, target, effectKind, row, rank, affinity, targeting, hook,
+  category, play, role, cardTargeting, color, element, shieldKind, target, effectKind, row, rank, affinity, targeting, hook,
   t, amountText, effectSentence,
 };
 
@@ -125,7 +128,7 @@ module.exports = {
  * amountSource 例外：网页里的效果句子用「B_atk+4」这种写法，固定值不需要前缀。
  */
 function applyProfile(profile) {
-  const targets = { category, kind, color, element, shieldKind, target, effectKind, row, rank, affinity, targeting };
+  const targets = { category, play, role, cardTargeting, color, element, shieldKind, target, effectKind, row, rank, affinity, targeting };
   for (const [name, map] of Object.entries(profile.enums || {})) {
     if (targets[name] && map && !map.$from) Object.assign(targets[name], map);
   }

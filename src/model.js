@@ -3,6 +3,7 @@
 // 再跑一遍一致性检查。检查只报告，不改任何东西。
 
 const L = require('./labels');
+const P = require('./profile');
 
 const SEVERITY_ORDER = { error: 0, warn: 1, info: 2 };
 
@@ -225,7 +226,9 @@ function buildModel(content, options = {}) {
     }
 
     return {
-      id: c.id, name: c.name, owner: c.owner, category: c.category, kind: c.kind, classId: c.classId,
+      id: c.id, name: c.name, owner: c.owner, category: c.category, classId: c.classId,
+      play: c.play || null, role: c.role || 'Normal', hero: !!c.hero, targeting: c.targeting || null,
+      chargeOptions: Array.isArray(c.chargeOptions) ? c.chargeOptions : null,
       colors: c.colors || [], ap: c.ap ?? 0, mp: c.mp ?? 0, charge: c.charge ?? 0, hasCrit: !!c.hasCrit,
       rulesText: text, behaviourId: c.behaviourId || null, formId: c.formId || null,
       armorBaseShield: c.armorBaseShield ?? null, shieldKind: c.shieldKind || null,
@@ -241,6 +244,14 @@ function buildModel(content, options = {}) {
   for (const c of cards) {
     if (c.decks.length === 0) {
       add('info', 'not-in-deck', { type: 'card', id: c.id }, `「${c.name}」不在任何卡组里`);
+    }
+  }
+
+  // 内容包规则（profile.json 的 rules）：和导入时用的是同一份，写法与 ContentLoader 的校验一致
+  const cardRules = options.profile ? (options.profile.collections.find((d) => d.key === 'cards') || {}).rules : null;
+  for (const raw of content.cards) {
+    for (const r of P.checkRules(cardRules, raw)) {
+      add('error', 'rule', { type: 'card', id: raw.id }, `「${raw.name}」${r.message}`);
     }
   }
 

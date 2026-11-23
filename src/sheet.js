@@ -188,6 +188,12 @@ function helpLines(profile) {
     '■ 「其它字段(JSON)」：表里没有单独列出来的字段。看不懂就别动。',
   ];
   for (const def of editable) {
+    for (const c of def.columns.filter((x) => x.blankMeans)) {
+      lines.push(`■ 「${def.label}」表的「${c.header}」：留空 = ${c.blankMeans}。`);
+    }
+    for (const r of def.rules || []) {
+      if (def.columns.some((c) => c.field === r.field)) lines.push(`■ 「${def.label}」表：${r.message}。`);
+    }
     for (const ch of def.children) {
       lines.push(`■ 「${ch.sheet}」表：一行一条，用「${def.label}id」对应到${def.label}，「序号」决定先后。某张${def.label}的行全删掉 = 这张${def.label}没有${ch.sheet}。`);
     }
@@ -297,9 +303,19 @@ function planImport(store, profile, sheets, options = {}) {
         // 逐列解析
         const parsed = new Map();
         let bad = false;
+        // 和导出时写进去的文字一模一样的格子 = 策划没碰过：直接跳过，不解析、不报错、不改。
+        // 这样即使某个字段的值形状和列类型对不上，只要没人改它，就永远不会被导入弄坏
+        const exportedFrom = item ? (baseOf(id) || item.obj) : null;
+        const untouched = (c, raw) => {
+          if (!exportedFrom) return false;
+          let shown = P.formatCell(c, P.getPath(exportedFrom, c.field), enums);
+          if (c.type === 'behaviour' && (shown === null || shown === '') && def.newBehaviour === 'id') shown = '无';
+          return cellStr(raw) === cellStr(shown);
+        };
         for (const c of present) {
           if (c.type === 'id') continue;
           const raw = r[hm.get(c.header)];
+          if (untouched(c, raw)) { parsed.set(c, { untouched: true }); continue; }
           if (c.type === 'behaviour') {
             const s = cellStr(raw);
             parsed.set(c, s === '' ? { empty: true } : ['无', 'none', '-', '—'].includes(s.toLowerCase()) ? { none: true } : { value: s });
@@ -358,6 +374,7 @@ function planImport(store, profile, sheets, options = {}) {
         for (const c of present) {
           if (c.type === 'id') continue;
           const p = parsed.get(c);
+          if (p.untouched) continue;
           let tableV;
           if (c.type === 'behaviour') tableV = p.value !== undefined ? p.value : p.empty && def.newBehaviour === 'id' ? id : ABSENT;
           else tableV = p.empty ? (c.default !== undefined ? c.default : ABSENT) : p.value;
@@ -485,7 +502,17 @@ function planImport(store, profile, sheets, options = {}) {
 
     for (const [id, pd] of pending) {
       if (pd.type === 'same') continue;
-      const obj = pd.obj ? P.orderKeys(pd.obj, def.fieldOrder) : undefined;
+      // 新项按 fieldOrder 排键；改动的项保持文件里原来的键顺序（新增的键排在后面），diff 才干净
+      let obj;
+      if (pd.type === 'add') obj = P.orderKeys(pd.obj, def.fieldOrder);
+      else if (pd.obj) obj = P.orderKeys(pd.obj, Object.keys(pd.item.obj));
+      if (obj) {
+        const broken = P.checkRules(def.rules, obj);
+        if (broken.length) {
+          for (const r of broken) err(pd.sheet, pd.rowNo, `「${id}」${r.message}`);
+          continue;
+        }
+      }
       plan.changes.push({ collection: def.key, label: def.label, def, id, type: pd.type, fields: pd.fields, obj, item: pd.item, file: pd.file || null });
     }
   }
