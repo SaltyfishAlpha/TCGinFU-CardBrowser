@@ -1,0 +1,6 @@
+{
+  "statuses": [
+    { "id": "exposed", "name": "破绽", "rulesText": "本轮内下一次受到的任意伤害+3。", "incomingDamageBonus": 3 },
+    { "id": "ghost", "name": "幽灵", "rulesText": "一个指向不存在行为的状态。", "behaviourId": "status_ghost" }
+  ]
+}

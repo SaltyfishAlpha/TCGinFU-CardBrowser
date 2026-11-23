@@ -1,0 +1,31 @@
+{
+  "cards": [
+    {
+      "id": "strike", "name": "打击", "owner": "hero", "category": "Class", "kind": "Skill", "classId": "剑士",
+      "colors": ["Might"], "ap": 1, "mp": 0, "charge": 0, "hasCrit": true,
+      "rulesText": "造成6点物理伤害【暴击】。命中后令目标获得【破绽】。",
+      "behaviourId": "strike",
+      "effects": [{ "kind": "Damage", "amount": { "source": "Flat", "add": 6 }, "element": "Physical", "target": "SingleEnemy" }]
+    },
+    {
+      "id": "drifted", "name": "漂移", "owner": "hero", "category": "Class", "kind": "Skill", "classId": "剑士",
+      "colors": [], "ap": 1, "mp": 0, "charge": 0, "hasCrit": false,
+      "rulesText": "造成7点物理伤害；若目标处于后排，再抽1张牌。",
+      "behaviourId": "drifted",
+      "effects": [{ "kind": "Damage", "amount": { "source": "Flat", "add": 5 }, "element": "Physical", "target": "SingleEnemy" }]
+    },
+    {
+      "id": "empty", "name": "空壳", "owner": "hero", "category": "Treasure", "kind": "Skill", "classId": "剑士",
+      "colors": [], "ap": 0, "mp": 0, "charge": 0, "hasCrit": false,
+      "rulesText": "什么都写了，但什么都没做。造成伤害【暴击】",
+      "behaviourId": "empty_impl", "effects": []
+    },
+    {
+      "id": "form_hit", "name": "形态击", "owner": "hero", "category": "Class", "kind": "Form", "classId": "剑士",
+      "colors": ["Might"], "ap": 1, "mp": 0, "charge": 0, "hasCrit": false,
+      "rulesText": "造成B_atk+4点物理伤害（本5级构筑为12点）。",
+      "behaviourId": "form_hit",
+      "effects": [{ "kind": "Damage", "amount": { "source": "FormAttack", "add": 4 }, "element": "Physical", "target": "SingleEnemy" }]
+    }
+  ]
+}

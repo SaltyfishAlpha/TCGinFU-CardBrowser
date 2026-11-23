@@ -1,0 +1,12 @@
+{
+  "id": "d",
+  "name": "测试卡组",
+  "characterId": "hero",
+  "main": [
+    { "card": "strike", "count": 3 },
+    { "card": "nope", "count": 1 }
+  ],
+  "formDecks": [
+    { "transformCard": "strike", "cards": [{ "card": "form_hit", "count": 2 }] }
+  ]
+}

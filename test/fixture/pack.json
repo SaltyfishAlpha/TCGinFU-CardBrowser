@@ -1,0 +1,11 @@
+{
+  "id": "fixture",
+  "name": "测试包",
+  "version": "0.0.1",
+  "statuses": ["statuses.json"],
+  "scripts": ["scripts/cards.lua", "scripts/missing.lua"],
+  "cards": ["cards/a.json"],
+  "characters": [],
+  "enemies": [],
+  "decks": ["decks/d.json"]
+}
