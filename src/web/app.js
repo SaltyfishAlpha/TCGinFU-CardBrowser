@@ -114,13 +114,13 @@
     { key: 'color', label: '颜色', get: (c) => (c.colors.length ? c.colors : ['']), name: (v) => (v ? lab(L.color, v) : '无色') },
     { key: 'ap', label: 'AP', get: (c) => [String(c.ap)], name: (v) => `${v} AP` },
     {
-      key: 'problem', label: '状况', name: (v) => ({ error: '有错误', warn: '有警告', nolua: '没有 Lua 行为', lua: '有 Lua 行为', crit: '带暴击' }[v]),
+      key: 'problem', label: '状况', name: (v) => ({ error: '有错误', warn: '有警告', pending: 'Lua 待实现', nolua: '没有 Lua 行为', lua: '有 Lua 行为', crit: '带暴击' }[v]),
       get: (c) => {
         const iss = issuesOf('card', c.id).concat(c.behaviourId ? issuesOf('behaviour', c.behaviourId) : []);
         const out = [];
         if (iss.some((x) => x.severity === 'error')) out.push('error');
         if (iss.some((x) => x.severity === 'warn')) out.push('warn');
-        out.push(c.hooks.length ? 'lua' : 'nolua');
+        out.push(c.hooks.length ? 'lua' : c.luaPending ? 'pending' : 'nolua');
         if (c.hasCrit) out.push('crit');
         return out;
       },
@@ -179,7 +179,7 @@
       <div class="tile-text">${rulesHtml(c.rulesText, S.q)}</div>
       <div class="tile-foot">
         ${c.hasCrit ? '<span class="tag crit">暴击</span>' : ''}
-        ${c.hooks.length ? `<span class="tag lua" title="${esc(c.hooks.join(', '))}">Lua · ${c.hooks.length} 个钩子</span>` : '<span class="tag nolua">无 Lua</span>'}
+        ${c.hooks.length ? `<span class="tag lua" title="${esc(c.hooks.join(', '))}">Lua · ${c.hooks.length} 个钩子</span>` : c.luaPending ? '<span class="tag warn">Lua 待实现</span>' : '<span class="tag nolua">无 Lua</span>'}
         ${c.decks.length ? `<span class="tag">卡组 ×${c.decks.reduce((a, d) => a + d.count, 0)}</span>` : ''}
         ${issueTags(iss)}
       </div>
@@ -375,6 +375,7 @@
     'deck-missing-card': ['卡组引用了不存在的卡', ''],
     'intent-missing': ['意图池引用了不存在的意图', ''],
     'no-behaviour-id': ['没有 behaviourId', '只有数据效果的卡。通常没问题，列出来供核对。'],
+    'behaviour-pending': ['Lua 待实现', '卡牌表导入时生成了占位，等 agent 按卡面实现。任务单在 dist/agent-tasks.md。'],
     'not-in-deck': ['不在任何卡组里', '可能是备选卡，也可能是漏放了。'],
   };
   const SEV_LABEL = { error: '错误', warn: '警告', info: '提示' };
@@ -477,7 +478,7 @@
         <section class="box"><h3>卡面文字</h3><div class="rules">${rulesHtml(c.rulesText)}</div></section>
         <section class="box"><h3>数值</h3><dl class="kv">${kv.map(([k, v]) => `<div><dt>${esc(k)}</dt><dd>${esc(v)}</dd></div>`).join('')}</dl></section>
         <section class="box"><h3>数据效果（引擎直接执行）</h3>${c.effectTexts.length ? `<ul class="plain">${c.effectTexts.map((t) => `<li>${esc(t)}</li>`).join('')}</ul>` : '<div style="color:var(--muted)">没有数据效果，全部靠 Lua 行为</div>'}</section>
-        ${b ? behaviourSection(b) : `<section class="box"><h3>Lua 行为</h3><div style="color:var(--muted)">${c.behaviourId ? `指向「${esc(c.behaviourId)}」，但 Lua 里没有这个行为` : '这张卡没有 Lua 行为'}</div></section>`}
+        ${b ? behaviourSection(b) : `<section class="box"><h3>Lua 行为</h3><div style="color:var(--muted)">${c.luaPending ? `待实现：占位在 <span class="mono">${esc(c.luaPending.file)}:${c.luaPending.line}</span>` : c.behaviourId ? `指向「${esc(c.behaviourId)}」，但 Lua 里没有这个行为` : '这张卡没有 Lua 行为'}</div></section>`}
         ${issuesSection(cardIssues(c))}
         <section class="box"><h3>所在卡组</h3>${decks ? `<ul class="plain">${decks}</ul>` : '<div style="color:var(--muted)">不在任何卡组里</div>'}</section>
         ${unm.length ? `<section class="box"><h3>迁移遗留字段（引擎不读）</h3><dl class="kv">${unm.map(([k, v]) => `<div><dt class="mono">${esc(k)}</dt><dd class="mono" style="font-weight:400">${esc(JSON.stringify(v))}</dd></div>`).join('')}</dl></section>` : ''}`,

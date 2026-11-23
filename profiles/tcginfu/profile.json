@@ -1,0 +1,181 @@
+{
+  "$comment": "TCGinFU 内容包的描述。换一个项目时复制这个目录改字段即可，工具的代码不用动。",
+  "name": "TCGinFU",
+  "manifest": "pack.json",
+
+  "enums": {
+    "category": { "Class": "职业牌", "Armor": "防具", "Weapon": "武器", "Treasure": "宝物" },
+    "kind": { "Form": "形态牌", "Transform": "升变", "Skill": "技能", "Timing": "时机", "Continuous": "持续" },
+    "color": { "Might": "力量", "Dexterity": "敏捷", "Insight": "洞察", "Willpower": "意志" },
+    "element": {
+      "Physical": "物理", "Dark": "暗", "Light": "光", "Fire": "火", "Ice": "冰", "Lightning": "雷",
+      "Wind": "风", "Earth": "地", "Poison": "毒", "Arcane": "奥术"
+    },
+    "shieldKind": { "Physical": "物理", "Magical": "魔法", "Universal": "全能" },
+    "target": {
+      "SingleEnemy": "单个敌人", "AllEnemies": "全体敌人", "Self": "自己", "SingleAlly": "单个队友",
+      "AllAllies": "全体队友"
+    },
+    "effectKind": {
+      "Damage": "伤害", "Heal": "回复HP", "GainShield": "护盾", "RestoreMp": "回复MP", "GainAp": "获得AP",
+      "Draw": "抽牌", "Discard": "弃牌", "GainCharge": "充能", "ApplyStatus": "施加状态", "MoveRow": "换排",
+      "GrantFreeMove": "免费换排", "SwapRows": "交换前后排", "Cover": "掩护"
+    },
+    "amountSource": { "Flat": "固定值", "FormAttack": "B_atk", "FormDefense": "B_def" },
+    "row": { "Front": "前排", "Back": "后排" },
+    "rank": { "Boss": "首领", "Normal": "普通" },
+    "affinity": { "Vulnerable": "弱", "Resistant": "抗", "Immune": "免疫", "Absorb": "吸收" },
+    "targeting": {
+      "AllPlayers": "我方全体", "DefaultSingle": "单体（默认选取）", "DesignatedRowSingle": "指定排的单体",
+      "FrontRowAoe": "前排全体", "SelfOrNone": "自身 / 无目标", "BackRowAoe": "后排全体"
+    },
+    "owner": { "$from": { "collection": "characters", "value": "id", "label": "name" } }
+  },
+
+  "collections": [
+    {
+      "key": "cards",
+      "label": "卡牌",
+      "manifestKey": "cards",
+      "arrayKey": "cards",
+      "idField": "id",
+      "nameField": "name",
+      "textField": "rulesText",
+      "behaviourField": "behaviourId",
+      "newBehaviour": "id",
+      "editable": true,
+      "newFile": [
+        { "when": { "kind": "Form" }, "file": "cards/forms.json" },
+        { "file": "cards/{owner}.json" }
+      ],
+      "fieldOrder": [
+        "id", "name", "owner", "category", "kind", "classId", "colors", "ap", "mp", "charge", "hasCrit",
+        "rulesText", "behaviourId", "effects", "formId", "armorBaseShield", "shieldKind", "weaponBaseDamage",
+        "twoHanded", "unmapped", "art"
+      ],
+      "columns": [
+        { "field": "id", "header": "id", "type": "id", "width": 24, "pattern": "^[a-z][a-z0-9_]*$" },
+        { "field": "name", "header": "卡名", "type": "string", "required": true, "width": 16 },
+        { "field": "owner", "header": "角色", "type": "enum", "enum": "owner", "required": true, "width": 9 },
+        { "field": "classId", "header": "职业", "type": "string", "suggest": true, "width": 10 },
+        { "field": "category", "header": "类别", "type": "enum", "enum": "category", "required": true, "width": 9 },
+        { "field": "kind", "header": "种类", "type": "enum", "enum": "kind", "required": true, "width": 9 },
+        { "field": "colors", "header": "颜色", "type": "list", "enum": "color", "default": [], "width": 12 },
+        { "field": "ap", "header": "AP", "type": "int", "default": 0, "width": 6 },
+        { "field": "mp", "header": "MP", "type": "int", "default": 0, "width": 6 },
+        { "field": "charge", "header": "充能", "type": "int", "default": 0, "width": 6 },
+        { "field": "hasCrit", "header": "暴击", "type": "bool", "default": false, "width": 6 },
+        { "field": "rulesText", "header": "卡面文字", "type": "text", "required": true, "width": 60 },
+        { "field": "behaviourId", "header": "Lua行为", "type": "behaviour", "width": 22 },
+        { "field": "formId", "header": "所属形态", "type": "string", "width": 12 },
+        { "field": "armorBaseShield", "header": "基础护盾", "type": "int", "width": 8 },
+        { "field": "shieldKind", "header": "护盾类型", "type": "enum", "enum": "shieldKind", "width": 9 },
+        { "field": "weaponBaseDamage", "header": "基础伤害", "type": "int", "width": 8 },
+        { "field": "twoHanded", "header": "双手", "type": "bool", "width": 6 },
+        { "field": "art", "header": "卡图", "type": "string", "width": 22 }
+      ],
+      "children": [
+        {
+          "field": "effects",
+          "sheet": "效果",
+          "default": [],
+          "columns": [
+            { "field": "kind", "header": "效果", "type": "enum", "enum": "effectKind", "required": true, "width": 10 },
+            { "field": "amount.source", "header": "数值来源", "type": "enum", "enum": "amountSource", "width": 10 },
+            { "field": "amount.add", "header": "数值", "type": "number", "width": 7 },
+            { "field": "amount.times", "header": "次数", "type": "int", "width": 6 },
+            { "field": "element", "header": "属性", "type": "enum", "enum": "element", "width": 8 },
+            { "field": "target", "header": "目标", "type": "enum", "enum": "target", "width": 10 },
+            { "field": "shieldKind", "header": "护盾类型", "type": "enum", "enum": "shieldKind", "width": 9 }
+          ]
+        }
+      ],
+      "references": [
+        { "collection": "decks", "paths": ["main[].card", "formDecks[].transformCard", "formDecks[].cards[].card"] },
+        { "collection": "characters", "paths": ["weaponCardId", "armorCardId"] }
+      ]
+    },
+    {
+      "key": "statuses",
+      "label": "状态",
+      "manifestKey": "statuses",
+      "arrayKey": "statuses",
+      "idField": "id",
+      "nameField": "name",
+      "textField": "rulesText",
+      "behaviourField": "behaviourId",
+      "newBehaviour": "none",
+      "editable": true,
+      "newFile": [{ "file": "statuses.json" }],
+      "fieldOrder": ["id", "name", "rulesText", "behaviourId"],
+      "columns": [
+        { "field": "id", "header": "id", "type": "id", "width": 24, "pattern": "^[a-z][a-z0-9_]*$" },
+        { "field": "name", "header": "名称", "type": "string", "required": true, "width": 14 },
+        { "field": "rulesText", "header": "效果", "type": "text", "required": true, "width": 50 },
+        { "field": "behaviourId", "header": "Lua行为", "type": "behaviour", "width": 24 },
+        { "field": "negative", "header": "负面", "type": "bool", "width": 6 },
+        { "field": "consumedOnTrigger", "header": "触发后消耗", "type": "bool", "width": 9 },
+        { "field": "incomingDamageBonus", "header": "受伤加成", "type": "int", "width": 8 },
+        { "field": "outgoingDamageBonus", "header": "伤害加成", "type": "int", "width": 8 }
+      ]
+    },
+    { "key": "characters", "label": "角色", "manifestKey": "characters", "arrayKey": "characters", "idField": "id", "nameField": "name" },
+    { "key": "enemies", "label": "敌人", "manifestKey": "enemies", "arrayKey": "enemies", "idField": "id", "nameField": "name" },
+    { "key": "decks", "label": "卡组", "manifestKey": "decks", "arrayKey": null, "idField": "id", "nameField": "name" }
+  ],
+
+  "lua": {
+    "manifestKey": "scripts",
+    "registerCall": "behaviour",
+    "stubFile": [
+      { "collection": "statuses", "file": "scripts/statuses.lua" },
+      { "when": { "kind": "Form" }, "file": "scripts/forms.lua" },
+      { "file": "scripts/{owner}.lua" }
+    ],
+    "newFileHeader": [
+      "-- {fileTitle} 的行为。",
+      "--",
+      "-- 写法约定见 scripts/miku.lua 开头。"
+    ],
+    "stub": [
+      "-- ───────────────────────── {name} ─────────────────────────",
+      "-- 「{text}」",
+      "--",
+      "-- TODO(待实现) 卡牌表导入时生成的占位。按卡面实现后：删掉这一行，再把下面几行开头的「-- 」去掉。",
+      "-- （占位保持注释状态，是因为 LuaBehaviourTests.L02 要求注册的行为至少挂一个钩子。）",
+      "-- behaviour(\"{id}\", {",
+      "--   on_resolved = function(ctx)",
+      "--   end,",
+      "-- })"
+    ],
+    "hooks": {
+      "can_play": "出牌前的额外条件",
+      "on_play": "打出时（数据效果之前）",
+      "on_resolved": "结算后（数据效果之后）",
+      "transform_condition": "升变的前置条件",
+      "on_attack": "我方出手的每次攻击",
+      "on_defend": "我方挨打的每次攻击",
+      "on_crit_roll": "掷完暴击骰、判定之前",
+      "on_cost": "计算费用时（可改写费用）",
+      "on_charge_spend": "即将消耗充能指示物时（可改写）",
+      "on_charge_spent": "消耗充能指示物后",
+      "on_attack_resolved": "一次攻击结算完毕后",
+      "on_damage_taken": "受到伤害后",
+      "on_damage_dealt": "造成伤害后",
+      "on_crit_dealt": "打出暴击后",
+      "on_card_played": "任意一张牌打出后",
+      "on_round_start": "轮始",
+      "on_round_end": "轮末"
+    },
+    "engineHooks": { "behaviourCs": "Assets/Scripts/Scripting/LuaCardBehaviour.cs", "proxiesCs": "Assets/Scripts/Scripting/LuaProxies.cs" }
+  },
+
+  "tasks": {
+    "intro": [
+      "这份清单由卡牌表导入生成，给实现 Lua 的 agent 看。卡面文字是需求，以卡面为准。",
+      "Lua 写法约定见 Assets/StreamingAssets/Content/scripts/miku.lua 开头；可用的钩子和 API 见 Assets/Scripts/Scripting/。",
+      "验收测试写在 Assets/Scripts/Tests/EditMode/LuaBehaviourTests.cs（参照 E01 起的写法：直接断言 HP / 护盾 / 状态，依据卡面文字）。",
+      "每条做完后：Lua 注释里的「卡面原文」要和当前卡面一致，然后在卡牌浏览器目录跑 `node build.js --check`，确认这张卡不再出现在报告里。"
+    ]
+  }
+}

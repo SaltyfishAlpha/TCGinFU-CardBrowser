@@ -119,3 +119,17 @@ module.exports = {
   category, kind, color, element, shieldKind, target, effectKind, row, rank, affinity, targeting, hook,
   t, amountText, effectSentence,
 };
+
+/**
+ * 用 profile 里的枚举和钩子说明覆盖上面的默认表，让网页、表格、任务单说同一套话。
+ * amountSource 例外：网页里的效果句子用「B_atk+4」这种写法，固定值不需要前缀。
+ */
+function applyProfile(profile) {
+  const targets = { category, kind, color, element, shieldKind, target, effectKind, row, rank, affinity, targeting };
+  for (const [name, map] of Object.entries(profile.enums || {})) {
+    if (targets[name] && map && !map.$from) Object.assign(targets[name], map);
+  }
+  if (profile.lua && profile.lua.hooks) Object.assign(hook, profile.lua.hooks);
+}
+
+module.exports.applyProfile = applyProfile;

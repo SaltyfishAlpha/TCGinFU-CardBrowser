@@ -91,6 +91,7 @@ function buildModel(content, options = {}) {
     } else cardById.set(c.id, c);
   }
   const statusById = new Map(content.statuses.map((s) => [s.id, s]));
+  const stubById = new Map((content.stubs || []).map((s) => [s.id, s]));
   const behaviourById = new Map();
   for (const b of content.behaviours) {
     if (behaviourById.has(b.id)) {
@@ -173,11 +174,15 @@ function buildModel(content, options = {}) {
     const ent = { type: 'card', id: c.id };
     const text = c.rulesText || '';
     const b = c.behaviourId ? behaviourById.get(c.behaviourId) : null;
+    const stub = c.behaviourId && !b ? stubById.get(c.behaviourId) : null;
     const effects = Array.isArray(c.effects) ? c.effects : [];
     const hasBase = c.armorBaseShield != null || c.weaponBaseDamage != null;
 
     if (!c.behaviourId) {
       add('info', 'no-behaviour-id', ent, `「${c.name}」没有 behaviourId 字段，这张卡只有数据效果`);
+    } else if (stub) {
+      add('info', 'behaviour-pending', ent,
+        `「${c.name}」的 Lua 行为「${c.behaviourId}」还是待实现的占位（${stub.file}:${stub.startLine}）${effects.length ? '，目前只有数据效果在生效' : '，目前打出后什么都不会发生'}`);
     } else if (!b) {
       if (effects.length === 0 && !hasBase) {
         add('error', 'behaviour-missing', ent,
@@ -228,6 +233,7 @@ function buildModel(content, options = {}) {
       effects, effectTexts: effects.map(L.effectSentence),
       unmapped: c.unmapped || {}, art: c.art || null, file: c._file,
       hooks: b ? b.hooks.map((h) => h.name) : [],
+      luaPending: stub ? { file: stub.file, line: stub.startLine } : null,
       decks: deckUses.get(c.id) || [],
     };
   });
@@ -338,7 +344,7 @@ function buildModel(content, options = {}) {
     cards, statuses: content.statuses.map(({ _file, ...s }) => ({ ...s, file: _file })),
     characters: characters.map(({ _file, ...c }) => c),
     enemies: content.enemies.map(({ _file, ...e }) => ({ ...e, file: _file })),
-    decks, behaviours, scripts: content.scripts, issues, issueIndex,
+    decks, behaviours, stubs: content.stubs || [], scripts: content.scripts, issues, issueIndex,
     unmappedSummary: Object.values(unmappedSummary).sort((a, b) => b.cards.length - a.cards.length),
   };
 }

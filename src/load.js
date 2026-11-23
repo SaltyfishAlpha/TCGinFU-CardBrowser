@@ -23,7 +23,7 @@ function list(pack, key) {
   return Array.isArray(pack[key]) ? pack[key] : [];
 }
 
-function loadContent(contentDir) {
+function loadContent(contentDir, options = {}) {
   const problems = [];
   const abs = (rel) => path.join(contentDir, rel);
   const pack = readJson(abs('pack.json'), problems, 'pack.json');
@@ -64,6 +64,7 @@ function loadContent(contentDir) {
 
   const scripts = [];
   const behaviours = [];
+  const stubs = [];
   for (const rel of list(pack, 'scripts')) {
     let src;
     try {
@@ -75,9 +76,10 @@ function loadContent(contentDir) {
       });
       continue;
     }
-    const parsed = parseLuaFile(rel, src);
+    const parsed = parseLuaFile(rel, src, options.lua);
     scripts.push({ file: rel, header: parsed.header, count: parsed.blocks.length });
     behaviours.push(...parsed.blocks);
+    stubs.push(...parsed.stubs);
     for (const err of parsed.errors) {
       problems.push({ severity: 'error', code: 'lua-parse', file: rel, line: err.line, message: err.message });
     }
@@ -103,7 +105,7 @@ function loadContent(contentDir) {
   return {
     contentDir: path.resolve(contentDir),
     pack: { id: pack.id, name: pack.name, version: pack.version, source: pack.source },
-    cards, statuses, characters, enemies, decks, scripts, behaviours, problems,
+    cards, statuses, characters, enemies, decks, scripts, behaviours, stubs, problems,
   };
 }
 

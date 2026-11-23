@@ -1,0 +1,30 @@
+[
+  {
+    "key": "imp",
+    "title": "小恶魔",
+    "element": "fire",
+    "hp": 12,
+    "desc": "每回合对随机目标造成3点火焰伤害。",
+    "script": "imp",
+    "skills": [
+      {
+        "type": "hit",
+        "power": {
+          "base": 3,
+          "scale": 1.5
+        }
+      }
+    ],
+    "loot": [
+      "ember"
+    ]
+  },
+  {
+    "key": "salamander",
+    "title": "火蜥蜴",
+    "element": "fire",
+    "desc": "被攻击时反击。",
+    "script": "salamander",
+    "skills": []
+  }
+]

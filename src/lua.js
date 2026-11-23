@@ -84,6 +84,8 @@ function leadingComment(lines, startLine) {
   for (let i = startLine - 2; i >= 0; i--) {
     const l = lines[i].trim();
     if (!l.startsWith('--')) break;
+    // 碰到上一个占位的注释尾巴（-- })）就停
+    if (/^--\s*\}\)\s*$/.test(l)) break;
     out.unshift(l.replace(/^--+\s?/, ''));
   }
   let title = '';
@@ -108,14 +110,52 @@ function quotedRulesText(commentLines) {
   return null;
 }
 
-function parseLuaFile(file, src) {
+/**
+ * 找「TODO(待实现)」占位：一段注释，里面有一行 TODO(待实现)，后面跟着被注释掉的 behaviour("id", {…})。
+ * 返回 1 起的行号：startLine 是这段注释的第一行，endLine 是注释掉的 「-- })」那一行。
+ */
+function findStubs(file, lines, registerCall) {
+  const stubs = [];
+  const callRe = new RegExp(`^\\s*--\\s*${registerCall}\\(\\s*["']([^"']+)["']`);
+  for (let i = 0; i < lines.length; i++) {
+    if (!/^\s*--.*TODO\(待实现\)/.test(lines[i])) continue;
+    let id = null;
+    let callLine = -1;
+    for (let j = i + 1; j < Math.min(lines.length, i + 12); j++) {
+      if (!/^\s*--/.test(lines[j])) break;
+      const cm = lines[j].match(callRe);
+      if (cm) { id = cm[1]; callLine = j; break; }
+    }
+    if (!id) continue;
+    let end = callLine;
+    for (let j = callLine; j < lines.length && /^\s*--/.test(lines[j]); j++) {
+      end = j;
+      if (/^\s*--\s*\}\)\s*$/.test(lines[j])) break;
+    }
+    let start = i;
+    while (start > 0 && /^\s*--/.test(lines[start - 1])) start--;
+    const comment = leadingComment(lines, i + 1);
+    stubs.push({
+      id, file, line: i + 1, startLine: start + 1, endLine: end + 1,
+      title: comment.title, quote: quotedRulesText(comment.lines),
+    });
+    i = end;
+  }
+  return stubs;
+}
+
+function parseLuaFile(file, src, options = {}) {
   src = src.replace(/\r\n/g, '\n');
   const lines = src.split('\n');
   const blocks = [];
   const errors = [];
-  START_RE.lastIndex = 0;
+  const registerCall = options.registerCall || 'behaviour';
+  const startRe = registerCall === 'behaviour'
+    ? START_RE
+    : new RegExp(`^[ \\t]*${registerCall}\\(\\s*(["'])([^"']+)\\1\\s*,\\s*\\{`, 'gm');
+  startRe.lastIndex = 0;
   let m;
-  while ((m = START_RE.exec(src))) {
+  while ((m = startRe.exec(src))) {
     const id = m[2];
     const openIdx = m.index + m[0].length - 1;
     const startLine = lineOf(src, m.index);
@@ -153,9 +193,9 @@ function parseLuaFile(file, src) {
       quote: quotedRulesText(comment.lines),
       statusRefs,
     });
-    START_RE.lastIndex = end;
+    startRe.lastIndex = end;
   }
-  return { blocks, errors, header: fileHeader(lines) };
+  return { blocks, errors, stubs: findStubs(file, lines, registerCall), header: fileHeader(lines) };
 }
 
 /** 文件开头的注释（写法约定之类），给浏览器里的「脚本文件」视图用 */

@@ -1,0 +1,60 @@
+{
+  "$comment": "测试用：和 TCGinFU 毫无关系的另一种数据结构，用来证明工具本身不绑定具体项目。",
+  "name": "怪物图鉴",
+  "enums": {
+    "element": { "fire": "火", "water": "水", "wood": "木" },
+    "skillType": { "hit": "攻击", "buff": "增益" }
+  },
+  "collections": [
+    {
+      "key": "monsters",
+      "label": "怪物",
+      "files": ["monsters/*.json"],
+      "idField": "key",
+      "nameField": "title",
+      "textField": "desc",
+      "behaviourField": "script",
+      "newBehaviour": "id",
+      "editable": true,
+      "newFile": [{ "file": "monsters/{element}.json" }],
+      "fieldOrder": ["key", "title", "element", "hp", "desc", "script", "skills"],
+      "columns": [
+        { "field": "key", "header": "编号", "type": "id", "pattern": "^[a-z][a-z0-9_]*$" },
+        { "field": "title", "header": "名字", "type": "string", "required": true },
+        { "field": "element", "header": "属性", "type": "enum", "enum": "element", "required": true },
+        { "field": "hp", "header": "生命", "type": "int", "default": 10 },
+        { "field": "desc", "header": "描述", "type": "text", "required": true },
+        { "field": "script", "header": "脚本", "type": "behaviour" }
+      ],
+      "children": [
+        {
+          "field": "skills",
+          "sheet": "技能",
+          "default": [],
+          "columns": [
+            { "field": "type", "header": "类型", "type": "enum", "enum": "skillType", "required": true },
+            { "field": "power.base", "header": "威力", "type": "int" }
+          ]
+        }
+      ],
+      "references": [{ "collection": "zones", "paths": ["spawns[].monster"] }]
+    },
+    { "key": "zones", "label": "区域", "files": ["zones.json"], "arrayKey": "zones", "idField": "id", "nameField": "name" }
+  ],
+  "lua": {
+    "files": ["ai/*.lua"],
+    "registerCall": "register",
+    "stubFile": [{ "file": "ai/{element}.lua" }],
+    "newFileHeader": ["-- {fileTitle}"],
+    "stub": [
+      "-- ── {name} ──",
+      "-- 「{text}」",
+      "-- TODO(待实现)",
+      "-- register(\"{id}\", {",
+      "--   on_turn = function(me) end,",
+      "-- })"
+    ],
+    "hooks": { "on_turn": "每回合" }
+  },
+  "tasks": { "intro": ["测试任务单"] }
+}
