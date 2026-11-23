@@ -20,7 +20,8 @@ npm run release
 
 - `导出卡牌表.cmd` / `导入卡牌表.cmd` / `打开卡牌浏览器.cmd` 三个按钮
 - 表格就在文件夹根目录：`卡牌表.xlsx`；任务单、导入记录在 `输出\` 下
-- 第一次运行会在附近自动找 TCGinFU 工程，找不到就请用户把工程文件夹拖进窗口，然后记在 `cardbrowser.local.json` 里
+- 工具放在游戏工程**附近**：和工程并排、放进工程里（如 `TCGinFU\Tools\`），或者隔一层并排。第一次运行时它会自己找到工程，以**相对路径**记进 `cardbrowser.local.json`，所以工程和工具一起挪位置、换电脑都不用重新设置。附近有多个工程（比如主工程和一个分支副本）时会问用哪个；不支持跨盘符
+- 所有配置里的路径都相对工具目录；旧版本记下的绝对路径会自动改成相对路径
 - `使用说明.txt` 是给策划看的说明
 
 `npm run release -- --no-runtime` 打不带运行时的小包（给已经装了 Node 的人）。
@@ -73,7 +74,7 @@ npm test                      # 跑工具自己的测试
 
 每次导入的预览、记录和任务单都留在 `dist/import/` 下，带时间戳。
 
-内容包的位置写在 `cardbrowser.config.json` 里，默认是同级目录下的 `../TCGinFU/Assets/StreamingAssets/Content`。工程放在别处时，新建一个 `cardbrowser.local.json`（不进仓库）覆盖它，或者用 `--content <目录>` 指定。
+内容包的位置写在 `cardbrowser.config.json` 里（相对工具目录），默认是并排的 `../TCGinFU/Assets/StreamingAssets/Content`。找不到时会在工具附近自动找；也可以在 `cardbrowser.local.json`（不进仓库）里写别的相对路径，或者临时用 `--content <目录>` 指定。
 
 ## 卡牌表里有什么
 

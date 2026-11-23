@@ -58,7 +58,15 @@ https://github.com/nodejs/node/blob/${process.version}/LICENSE
 const GUIDE = `TCGinFU 卡牌工具 v${pkg.version}
 ====================================
 
-不用安装任何东西。把整个文件夹放在哪都行（建议放在 TCGinFU 工程旁边，它会自己找到工程）。
+不用安装任何东西。把这个文件夹放在游戏工程附近，它会自己找到工程，任选一种摆法：
+
+  和工程并排：   某个文件夹\\TCGinFU\\              和  某个文件夹\\TCGinFU卡牌工具\\
+  放进工程里：   TCGinFU\\Tools\\TCGinFU卡牌工具\\
+  隔一层并排：   某个文件夹\\TCGinFU\\              和  某个文件夹\\工具\\TCGinFU卡牌工具\\
+
+找到后记在 cardbrowser.local.json 里，记的是相对位置（比如 ../TCGinFU/...），
+所以工程和工具一起挪到别处、换一台电脑，都不用重新设置。
+附近有好几个工程（比如主工程和一个分支副本）时，第一次运行会问你用哪个。
 
 三个按钮
 --------
@@ -67,8 +75,8 @@ const GUIDE = `TCGinFU 卡牌工具 v${pkg.version}
                      （也可以把别的 xlsx 文件拖到它上面导入那个文件）
   打开卡牌浏览器.cmd  在浏览器里看所有卡、Lua 实现情况和检查报告；游戏数据一改页面就自动刷新
 
-第一次运行时如果没找到游戏工程，会请你把 TCGinFU 工程文件夹拖进黑色窗口再回车，之后就记住了。
-（记在 cardbrowser.local.json 里；换了工程位置删掉这个文件即可。）
+如果附近没找到游戏工程，会提示上面几种摆法，也可以把工程文件夹拖进黑色窗口回车（要和工具在同一个盘上）。
+想换成别的工程：删掉 cardbrowser.local.json，再运行一次。
 
 日常流程
 --------
@@ -99,7 +107,7 @@ function main() {
   for (const rel of ['build.js', 'package.json', 'src', 'profiles']) copy(rel);
   writeLaunchers(DIR);
   fs.writeFileSync(path.join(DIR, 'cardbrowser.config.json'), JSON.stringify({
-    $comment: '发布版设置。contentDir 留空 = 自动在附近找 TCGinFU 工程，找不到时第一次运行会问你。',
+    $comment: '发布版设置。contentDir 留空 = 自动在工具附近找游戏工程，找到后以相对路径记进 cardbrowser.local.json。所有路径都相对本文件夹。',
     contentDir: '',
     outDir: '输出',
     xlsx: '卡牌表.xlsx',

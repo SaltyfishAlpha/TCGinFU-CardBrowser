@@ -338,7 +338,6 @@ function buildModel(content, options = {}) {
 
   return {
     pack: content.pack,
-    contentDir: content.contentDir,
     generatedAt: new Date().toISOString(),
     engineHooks: options.engineHooks || null,
     cards, statuses: content.statuses.map(({ _file, ...s }) => ({ ...s, file: _file })),

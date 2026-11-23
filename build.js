@@ -65,6 +65,14 @@ function readConfig() {
     try {
       const c = JSON.parse(fs.readFileSync(p, 'utf8'));
       for (const k of ['contentDir', 'engineDir', 'outDir', 'profile', 'xlsx']) if (c[k]) cfg[k] = path.resolve(__dirname, c[k]);
+      // 旧版本记的是绝对路径：同盘的话顺手改成相对路径，以后整体挪位置也不用改配置
+      if (name === 'cardbrowser.local.json' && c.contentDir && path.isAbsolute(c.contentDir)) {
+        const rel = relToTool(path.resolve(c.contentDir));
+        if (rel) {
+          c.contentDir = rel;
+          fs.writeFileSync(p, JSON.stringify(c, null, 2) + '\n', 'utf8');
+        }
+      }
     } catch (e) {
       if (e.code !== 'ENOENT') console.error(`读 ${name} 出错：${e.message}`);
     }
@@ -196,28 +204,47 @@ function normalizeContentDir(p) {
   return null;
 }
 
-/** 在工具目录的上级和同级里找 Unity 工程的内容包（发布版解压到哪都能自己找到） */
-function autoDetectContent() {
-  const seen = new Set();
+/** 相对工具目录的写法（统一用 /），跨盘符时没法相对，返回 null */
+function relToTool(abs) {
+  const rel = path.relative(__dirname, abs);
+  if (!rel) return '.';
+  if (path.isAbsolute(rel)) return null;
+  return rel.split(path.sep).join('/');
+}
+
+const PLACEMENT_HINT = [
+  '工具要放在游戏工程附近，任选一种摆法：',
+  '  · 和工程并排：   <某个文件夹>\\TCGinFU\\  和  <某个文件夹>\\TCGinFU卡牌工具\\',
+  '  · 放进工程里：   TCGinFU\\Tools\\TCGinFU卡牌工具\\',
+  '  · 隔一层并排：   <某个文件夹>\\TCGinFU\\  和  <某个文件夹>\\工具\\TCGinFU卡牌工具\\',
+].join('\n');
+
+/**
+ * 在工具「附近」找 Unity 工程的内容包，由近到远：
+ *   1. 工具在工程里面（往上 4 层以内的某个祖先就是工程）
+ *   2. 工具和工程并排（上一层文件夹里的兄弟）
+ *   3. 隔一层并排（上两层文件夹里的兄弟）
+ * 同一距离找到多个工程时返回全部，交给调用方决定。
+ */
+function nearbyContentDirs() {
   let dir = __dirname;
   for (let up = 0; up < 4; up++) {
-    const parent = path.dirname(dir);
-    for (const base of [dir, parent]) {
-      let entries = [];
-      try { entries = fs.readdirSync(base, { withFileTypes: true }); } catch { continue; }
-      for (const e of entries) {
-        if (!e.isDirectory()) continue;
-        const cand = path.join(base, e.name);
-        if (seen.has(cand)) continue;
-        seen.add(cand);
-        const c = normalizeContentDir(cand);
-        if (c) return c;
-      }
-    }
-    if (parent === dir) break;
-    dir = parent;
+    dir = path.dirname(dir);
+    if (hasPack(path.join(dir, PACK_REL))) return [path.join(dir, PACK_REL)];
+    if (path.dirname(dir) === dir) break;
   }
-  return null;
+  const parent = path.dirname(__dirname);
+  for (const base of [parent, path.dirname(parent)]) {
+    let entries = [];
+    try { entries = fs.readdirSync(base, { withFileTypes: true }); } catch { continue; }
+    const found = entries
+      .filter((e) => e.isDirectory() && path.join(base, e.name) !== __dirname)
+      .map((e) => normalizeContentDir(path.join(base, e.name)))
+      .filter(Boolean);
+    if (found.length) return found;
+    if (path.dirname(base) === base) break;
+  }
+  return [];
 }
 
 function saveLocalConfig(patch) {
@@ -228,28 +255,47 @@ function saveLocalConfig(patch) {
   return p;
 }
 
-async function locateContent(interactive) {
-  const auto = autoDetectContent();
-  if (auto) {
-    saveLocalConfig({ contentDir: auto });
-    console.log(`找到内容包：${auto}（已记住，下次不用再找）`);
-    return auto;
-  }
-  if (!interactive || !process.stdin.isTTY) {
-    console.error('找不到内容包（pack.json）。在 cardbrowser.local.json 里写 "contentDir"，或者用 --content <目录> 指定。');
+/** 记住内容包位置：只存相对工具目录的路径，整个摆法一起挪、换电脑都不用改 */
+function rememberContent(dir) {
+  const rel = relToTool(dir);
+  if (!rel) {
+    console.error(`${dir} 和工具不在同一个盘上，没法用相对路径记住它。`);
+    console.error(PLACEMENT_HINT);
     return null;
   }
-  console.log('还不知道游戏工程在哪。');
+  saveLocalConfig({ contentDir: rel });
+  console.log(`使用内容包：${rel}（已记住，下次不用再找）`);
+  return dir;
+}
+
+async function locateContent(interactive) {
+  const near = nearbyContentDirs();
+  const canAsk = interactive && process.stdin.isTTY;
+  if (near.length === 1) return rememberContent(near[0]);
+  if (near.length > 1) {
+    if (!canAsk) {
+      console.error(`附近有多个游戏工程：\n${near.map((d) => '  ' + relToTool(d)).join('\n')}\n在 cardbrowser.local.json 里写 "contentDir"（相对工具目录）指定用哪个。`);
+      return null;
+    }
+    console.log('附近有多个游戏工程：');
+    near.forEach((d, i) => console.log(`  ${i + 1}. ${relToTool(d)}`));
+    const a = await ask('用哪个？输入编号回车：');
+    const pick = near[Number(a) - 1];
+    return pick ? rememberContent(pick) : null;
+  }
+  console.error('在工具附近没找到游戏工程（Assets\\StreamingAssets\\Content\\pack.json）。');
+  if (!canAsk) {
+    console.error(PLACEMENT_HINT);
+    return null;
+  }
+  console.error(PLACEMENT_HINT);
   for (;;) {
-    const a = await ask('把 TCGinFU 工程文件夹（或者它里面的 Assets\\StreamingAssets\\Content）拖进这个窗口，然后回车：');
+    const a = await ask('或者把 TCGinFU 工程文件夹拖进这个窗口回车（直接回车退出）：');
     if (!a) return null;
     const dir = normalizeContentDir(a);
-    if (dir) {
-      saveLocalConfig({ contentDir: dir });
-      console.log(`好的：${dir}（已记住，下次不用再问）`);
-      return dir;
-    }
-    console.log('这个文件夹里没找到 pack.json，再试一次（直接回车退出）。');
+    if (!dir) { console.log('这个文件夹里没找到 pack.json，再试一次。'); continue; }
+    const ok = rememberContent(dir);
+    if (ok) return ok;
   }
 }
 
@@ -294,6 +340,8 @@ function ask(question) {
 
 async function cmdImport(paths, args) {
   const src = paths.xlsxPath;
+  // 报告和任务单里写相对工具目录的路径：任务单要交给别人，绝对路径对别人没意义
+  const shown = relToTool(src) || path.basename(src);
   if (!fs.existsSync(src)) { console.error(`找不到表格 ${src}。先导出一份，或者指定文件：node build.js import <文件.xlsx>`); process.exitCode = 2; return; }
   let sheets;
   try {
@@ -313,7 +361,7 @@ async function cmdImport(paths, args) {
   const enums = resolveEnums(profile, store.collections);
   const writeReport = (applied) => {
     const file = path.join(dir, `${ts}-${applied ? '导入记录' : '预览'}.md`);
-    fs.writeFileSync(file, planMarkdown(plan, result, { applied, source: src, enums }), 'utf8');
+    fs.writeFileSync(file, planMarkdown(plan, result, { applied, source: shown, enums }), 'utf8');
     return file;
   };
 
@@ -346,7 +394,7 @@ async function cmdImport(paths, args) {
   console.log(`记录：${writeReport(true)}`);
   const writes = store.commit();
   console.log(`已写入 ${writes.length} 个文件：${writes.map((w) => w.rel).join('、') || '无'}`);
-  const tasksMd = tasksMarkdown(profile, result, store, { source: src });
+  const tasksMd = tasksMarkdown(profile, result, store, { source: shown });
   const tasksFile = path.join(dir, `${ts}-agent任务单.md`);
   fs.writeFileSync(tasksFile, tasksMd, 'utf8');
   fs.writeFileSync(path.join(paths.outDir, 'agent-tasks.md'), tasksMd, 'utf8');
