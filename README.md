@@ -10,6 +10,21 @@ json + lua 内容包的策划工具，做三件事：
 
 需要 [Node.js](https://nodejs.org/) 18 或更新版本，不用装任何依赖，也不需要装 Excel 插件。
 
+## 发布版（给策划）
+
+```powershell
+npm run release
+```
+
+生成 `release/TCGinFU卡牌工具/` 和同名 zip（约 34 MB）。包里自带 Node 运行时（`runtime\node.exe`），解压就能用，电脑上不用装任何东西：
+
+- `导出卡牌表.cmd` / `导入卡牌表.cmd` / `打开卡牌浏览器.cmd` 三个按钮
+- 表格就在文件夹根目录：`卡牌表.xlsx`；任务单、导入记录在 `输出\` 下
+- 第一次运行会在附近自动找 TCGinFU 工程，找不到就请用户把工程文件夹拖进窗口，然后记在 `cardbrowser.local.json` 里
+- `使用说明.txt` 是给策划看的说明
+
+`npm run release -- --no-runtime` 打不带运行时的小包（给已经装了 Node 的人）。
+
 ## 两条工作流
 
 ### 出新卡

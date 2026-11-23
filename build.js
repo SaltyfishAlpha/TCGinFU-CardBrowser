@@ -47,6 +47,7 @@ function parseArgs(argv) {
     else if (k === '--apply') a.apply = true;
     else if (k === '--force') a.force = true;
     else if (k === '--confirm') a.confirm = true;
+    else if (k === '--ask') a.ask = true;
     else if (k === '--xlsx') a.xlsx = argv[++i];
     else if (k === '--profile') a.profile = argv[++i];
     else if (k === '-h' || k === '--help') a.help = true;
@@ -63,7 +64,7 @@ function readConfig() {
     const p = path.join(__dirname, name);
     try {
       const c = JSON.parse(fs.readFileSync(p, 'utf8'));
-      for (const k of ['contentDir', 'engineDir', 'outDir', 'profile']) if (c[k]) cfg[k] = path.resolve(__dirname, c[k]);
+      for (const k of ['contentDir', 'engineDir', 'outDir', 'profile', 'xlsx']) if (c[k]) cfg[k] = path.resolve(__dirname, c[k]);
     } catch (e) {
       if (e.code !== 'ENOENT') console.error(`读 ${name} 出错：${e.message}`);
     }
@@ -82,7 +83,8 @@ function resolvePaths(args) {
   }
   const outDir = path.resolve(args.out || cfg.outDir || path.join(__dirname, 'dist'));
   const profileDir = path.resolve(args.profile || cfg.profile || path.join(__dirname, 'profiles', 'tcginfu'));
-  return { contentDir, engineDir, outDir, profileDir };
+  const xlsxPath = path.resolve(args.xlsx || cfg.xlsx || path.join(outDir, '卡牌表.xlsx'));
+  return { contentDir, engineDir, outDir, profileDir, xlsxPath, explicitContent: !!args.content };
 }
 
 function build(paths) {
@@ -117,13 +119,18 @@ function openFile(file) {
   spawn(cmd, args, { detached: true, stdio: 'ignore' }).unref();
 }
 
-function main() {
+async function main() {
   const args = parseArgs(process.argv.slice(2));
   if (args.help) {
     console.log(fs.readFileSync(__filename, 'utf8').split('\n').filter((l) => l.startsWith('//')).map((l) => l.slice(3)).join('\n'));
     return;
   }
-  const paths = resolvePaths(args);
+  let paths = resolvePaths(args);
+  if (!hasPack(paths.contentDir) && !paths.explicitContent) {
+    const found = await locateContent(args.ask);
+    if (!found) { process.exitCode = 1; return; }
+    paths = resolvePaths(args);
+  }
   if (args.cmd === 'check') args.check = true;
   if (args.cmd === 'export') return cmdExport(paths, args);
   if (args.cmd === 'import') return cmdImport(paths, args);
@@ -175,6 +182,77 @@ function main() {
   }
 }
 
+const PACK_REL = path.join('Assets', 'StreamingAssets', 'Content');
+
+function hasPack(dir) {
+  return fs.existsSync(path.join(dir, 'pack.json'));
+}
+
+/** 用户给的路径可以是内容包目录，也可以是 Unity 工程根目录 */
+function normalizeContentDir(p) {
+  const d = path.resolve(p.trim().replace(/^["']|["']$/g, ''));
+  if (hasPack(d)) return d;
+  if (hasPack(path.join(d, PACK_REL))) return path.join(d, PACK_REL);
+  return null;
+}
+
+/** 在工具目录的上级和同级里找 Unity 工程的内容包（发布版解压到哪都能自己找到） */
+function autoDetectContent() {
+  const seen = new Set();
+  let dir = __dirname;
+  for (let up = 0; up < 4; up++) {
+    const parent = path.dirname(dir);
+    for (const base of [dir, parent]) {
+      let entries = [];
+      try { entries = fs.readdirSync(base, { withFileTypes: true }); } catch { continue; }
+      for (const e of entries) {
+        if (!e.isDirectory()) continue;
+        const cand = path.join(base, e.name);
+        if (seen.has(cand)) continue;
+        seen.add(cand);
+        const c = normalizeContentDir(cand);
+        if (c) return c;
+      }
+    }
+    if (parent === dir) break;
+    dir = parent;
+  }
+  return null;
+}
+
+function saveLocalConfig(patch) {
+  const p = path.join(__dirname, 'cardbrowser.local.json');
+  let cur = {};
+  try { cur = JSON.parse(fs.readFileSync(p, 'utf8')); } catch { /* 第一次 */ }
+  fs.writeFileSync(p, JSON.stringify({ ...cur, ...patch }, null, 2) + '\n', 'utf8');
+  return p;
+}
+
+async function locateContent(interactive) {
+  const auto = autoDetectContent();
+  if (auto) {
+    saveLocalConfig({ contentDir: auto });
+    console.log(`找到内容包：${auto}（已记住，下次不用再找）`);
+    return auto;
+  }
+  if (!interactive || !process.stdin.isTTY) {
+    console.error('找不到内容包（pack.json）。在 cardbrowser.local.json 里写 "contentDir"，或者用 --content <目录> 指定。');
+    return null;
+  }
+  console.log('还不知道游戏工程在哪。');
+  for (;;) {
+    const a = await ask('把 TCGinFU 工程文件夹（或者它里面的 Assets\\StreamingAssets\\Content）拖进这个窗口，然后回车：');
+    if (!a) return null;
+    const dir = normalizeContentDir(a);
+    if (dir) {
+      saveLocalConfig({ contentDir: dir });
+      console.log(`好的：${dir}（已记住，下次不用再问）`);
+      return dir;
+    }
+    console.log('这个文件夹里没找到 pack.json，再试一次（直接回车退出）。');
+  }
+}
+
 function loadStore(paths) {
   const profile = loadProfile(paths.profileDir);
   const store = new ContentStore(paths.contentDir, profile).load();
@@ -191,7 +269,7 @@ function stamp() {
 function cmdExport(paths, args) {
   const { profile, store } = loadStore(paths);
   const sheets = exportWorkbook(store, profile);
-  const file = path.resolve(args.xlsx || path.join(paths.outDir, '卡牌表.xlsx'));
+  const file = paths.xlsxPath;
   fs.mkdirSync(path.dirname(file), { recursive: true });
   try {
     fs.writeFileSync(file, writeXlsx(sheets));
@@ -215,8 +293,8 @@ function ask(question) {
 }
 
 async function cmdImport(paths, args) {
-  if (!args.xlsx) { console.error('要指定表格文件：node build.js import <文件.xlsx>'); process.exitCode = 2; return; }
-  const src = path.resolve(args.xlsx);
+  const src = paths.xlsxPath;
+  if (!fs.existsSync(src)) { console.error(`找不到表格 ${src}。先导出一份，或者指定文件：node build.js import <文件.xlsx>`); process.exitCode = 2; return; }
   let sheets;
   try {
     sheets = readXlsx(fs.readFileSync(src));
@@ -302,4 +380,4 @@ function serve(dir, port) {
   return { notify: () => { for (const c of clients) c.write('data: reload\n\n'); } };
 }
 
-main();
+main().catch((e) => { console.error(e.message || e); process.exitCode = 1; });
