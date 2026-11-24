@@ -1,6 +1,6 @@
 {
   "name": "tcginfu-card-browser",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "private": true,
   "description": "TCGinFU 卡牌浏览器：把 StreamingAssets/Content 里的 json + lua 拼成策划能直接读的卡牌目录，并做一致性检查。",
   "type": "commonjs",

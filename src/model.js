@@ -3,7 +3,7 @@
 // 再跑一遍一致性检查。检查只报告，不改任何东西。
 
 const L = require('./labels');
-const P = require('./profile');
+const { checkItem } = require('./crosscheck');
 
 const SEVERITY_ORDER = { error: 0, warn: 1, info: 2 };
 
@@ -128,13 +128,27 @@ function buildModel(content, options = {}) {
     const sections = [];
     const main = (d.main || []).map((x) => ({ card: x.card, count: x.count || 1 }));
     sections.push({ key: 'main', title: '主卡组', transformCard: null, cards: main });
-    for (const f of d.formDecks || []) {
+    // 2026-11-23 起形态卡组记在升变牌自己的 formDeck 上（规则书 §3.1）：主卡组编入哪张升变牌，就带上它那组
+    for (const x of main) {
+      const t = cardById.get(x.card);
+      if (!t || t.role !== 'Transform' || !Array.isArray(t.formDeck)) continue;
       sections.push({
-        key: `form:${f.transformCard}`,
-        title: `形态卡组 · ${cardById.get(f.transformCard)?.name || f.transformCard}`,
-        transformCard: f.transformCard,
-        cards: (f.cards || []).map((x) => ({ card: x.card, count: x.count || 1 })),
+        key: `form:${t.id}`,
+        title: `形态卡组 · ${t.name}`,
+        transformCard: t.id,
+        cards: t.formDeck.map((f) => ({ card: f.card, count: f.count || 1 })),
       });
+    }
+    // 形态牌只能进形态卡组（handoff §8）
+    for (const x of main) {
+      const c = cardById.get(x.card);
+      if (c && c.role === 'Form') {
+        add('error', 'form-in-main', { type: 'card', id: c.id }, `形态牌「${c.name}」被放进了卡组「${d.name}」的主卡组——形态牌只能出现在升变牌的形态卡组里`);
+      }
+    }
+    // 老格式：卡组文件里的 formDecks 已经不读了
+    if (Array.isArray(d.formDecks)) {
+      add('error', 'rule', { type: 'deck', id: d.id }, `卡组「${d.name}」还写着 formDecks——已废弃，形态卡组要写在升变牌的 formDeck 上`);
     }
     for (const s of sections) {
       for (const x of s.cards) {
@@ -226,7 +240,9 @@ function buildModel(content, options = {}) {
     }
 
     return {
-      id: c.id, name: c.name, owner: c.owner, category: c.category, classId: c.classId,
+      id: c.id, name: c.name, owner: c.owner, category: c.category, classId: c.classId || null,
+      formDeck: Array.isArray(c.formDeck) ? c.formDeck.map((f) => ({ card: f.card, count: f.count || 1 })) : null,
+      ranged: c.ranged ?? c.unmapped?.ranged ?? null, requiresBackRow: c.requiresBackRow ?? c.unmapped?.requires_back_row ?? null,
       play: c.play || null, role: c.role || 'Normal', hero: !!c.hero, targeting: c.targeting || null,
       chargeOptions: Array.isArray(c.chargeOptions) ? c.chargeOptions : null,
       colors: c.colors || [], ap: c.ap ?? 0, mp: c.mp ?? 0, charge: c.charge ?? 0, hasCrit: !!c.hasCrit,
@@ -247,11 +263,21 @@ function buildModel(content, options = {}) {
     }
   }
 
-  // 内容包规则（profile.json 的 rules）：和导入时用的是同一份，写法与 ContentLoader 的校验一致
-  const cardRules = options.profile ? (options.profile.collections.find((d) => d.key === 'cards') || {}).rules : null;
-  for (const raw of content.cards) {
-    for (const r of P.checkRules(cardRules, raw)) {
-      add('error', 'rule', { type: 'card', id: raw.id }, `「${raw.name}」${r.message}`);
+  // 内容包规则与跨项校验（profile.json 的 rules / ref / sum / matchParent）：和导入时用的是同一份
+  if (options.profile) {
+    const view = {
+      cards: new Map(content.cards.map((c) => [String(c.id), c])),
+      statuses: new Map(content.statuses.map((s) => [String(s.id), s])),
+    };
+    for (const [key, list] of [['cards', content.cards], ['statuses', content.statuses]]) {
+      const def = options.profile.collections.find((d) => d.key === key);
+      if (!def) continue;
+      for (const raw of list) {
+        const { _file, _index, ...obj } = raw;
+        for (const p of checkItem(def, obj, view)) {
+          add('error', 'rule', { type: key === 'cards' ? 'card' : 'status', id: raw.id }, `「${raw.name || raw.id}」${p.message}`);
+        }
+      }
     }
   }
 

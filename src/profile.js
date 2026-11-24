@@ -72,6 +72,17 @@ function deletePath(obj, p) {
   }
 }
 
+/**
+ * 列对应的值。列可以带 fallback：字段不存在时读另一个路径（比如 ranged 缺省时读 unmapped.ranged，和引擎一致）。
+ * 返回 undefined 表示两个路径都没有。
+ */
+function fieldValue(col, obj) {
+  if (!obj) return undefined;
+  if (hasPath(obj, col.field)) return getPath(obj, col.field);
+  if (col.fallback && hasPath(obj, col.fallback)) return getPath(obj, col.fallback);
+  return undefined;
+}
+
 /** 被列覆盖的顶层字段（amount.add 覆盖的是 amount 下的 add，不是整个 amount） */
 function coveredPaths(columns) {
   return columns.map((c) => c.field).filter((f) => f && !f.startsWith('_'));
@@ -170,6 +181,7 @@ function parseCell(col, raw, enums) {
         }
         return { value: out };
       }
+      if (col.maxItems && parts.length > col.maxItems) return { error: `「${col.header}」最多 ${col.maxItems} 项，现在填了 ${parts.length} 项` };
       if (!col.enum) return { value: parts };
       const map = enums[col.enum] || {};
       const out = [];
@@ -257,5 +269,5 @@ function orderKeys(obj, order) {
 
 module.exports = {
   loadProfile, getPath, hasPath, setPath, deletePath, otherFields, resolveEnums, parseEnum, parseCell, formatCell,
-  pickRule, fillTemplate, orderKeys, checkRules, matchesWhen,
+  pickRule, fillTemplate, orderKeys, checkRules, matchesWhen, fieldValue,
 };

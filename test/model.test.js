@@ -63,7 +63,7 @@ test('输出：HTML 内嵌数据可解析，CSV 带 BOM，Markdown 有卡名', (
   const m = html.match(/<script id="data" type="application\/json">([\s\S]*?)<\/script>/);
   assert.ok(m, '找到内嵌数据');
   const data = JSON.parse(m[1]);
-  assert.strictEqual(data.cards.length, 4);
+  assert.strictEqual(data.cards.length, 5);
   assert.ok(renderCsv(model).startsWith('﻿'));
   assert.ok(renderMarkdown(model).includes('#### 打击 `strike`'));
 });

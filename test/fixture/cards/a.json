@@ -26,7 +26,10 @@
           "element": "Physical",
           "target": "SingleEnemy"
         }
-      ]
+      ],
+      "unmapped": {
+        "ranged": true
+      }
     },
     {
       "id": "drifted",
@@ -60,7 +63,6 @@
       "owner": "hero",
       "category": "Treasure",
       "play": "Skill",
-      "classId": "剑士",
       "colors": [],
       "ap": 0,
       "mp": 0,
@@ -97,8 +99,34 @@
           "element": "Physical",
           "target": "SingleEnemy"
         }
+      ]
+    },
+    {
+      "id": "blade_stance",
+      "name": "剑之架势",
+      "owner": "hero",
+      "category": "Class",
+      "role": "Transform",
+      "classId": "剑士",
+      "colors": [
+        "Might"
       ],
-      "formId": "blade"
+      "ap": 0,
+      "mp": 0,
+      "charge": 0,
+      "hasCrit": false,
+      "rulesText": "第3轮起升变，持续2轮。",
+      "behaviourId": "blade_stance",
+      "effects": [],
+      "formDeck": [
+        {
+          "card": "form_hit",
+          "count": 10
+        }
+      ],
+      "unmapped": {
+        "ranged": false
+      }
     }
   ]
 }

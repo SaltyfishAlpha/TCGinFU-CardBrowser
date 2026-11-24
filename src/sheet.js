@@ -8,6 +8,7 @@
 //      记为冲突，不覆盖。
 
 const P = require('./profile');
+const { checkItem, finalView } = require('./crosscheck');
 
 const SPECIAL = { file: '文件', del: '删除', other: '其它字段(JSON)', lua: 'Lua状态', seq: '序号' };
 const META_SHEET = '_meta';
@@ -43,9 +44,14 @@ const clone = (v) => (v === undefined || v === ABSENT ? v : JSON.parse(JSON.stri
 
 /** 字段在「表格语义」下的值：缺省字段视为默认值，这样「json 里没写 ap」和「表里 ap 填 0」算同一回事 */
 function normField(col, obj) {
-  if (!obj || !P.hasPath(obj, col.field)) return col.default !== undefined ? col.default : ABSENT;
-  return P.getPath(obj, col.field);
+  const v = P.fieldValue(col, obj);
+  if (v === undefined) return col.default !== undefined ? col.default : ABSENT;
+  return v;
 }
+
+/** 子表的父项列名：形态卡组的父项叫「升变牌id」，效果的父项叫「卡牌id」 */
+const parentHeaderOf = (def, ch) => `${ch.parentLabel || def.label}id`;
+const parentNameHeaderOf = (def, ch) => `${ch.parentLabel || def.label}名`;
 
 // ───────── 导出 ─────────
 
@@ -74,6 +80,10 @@ function enumColumnsFor(profile, enums, store) {
     const cols = [...def.columns, ...def.children.flatMap((c) => c.columns)];
     for (const c of cols) {
       if ((c.type === 'enum' || c.type === 'list') && c.enum) add(`enum:${c.enum}`, c.header, Object.values(enums[c.enum] || {}));
+      if (c.type === 'ref' && store.collections[c.collection]) {
+        const vals = store.collections[c.collection].items.filter((it) => !c.where || P.matchesWhen(it.obj, c.where)).map((it) => String(it.id));
+        add(`ref:${c.collection}:${JSON.stringify(c.where || {})}`, `${c.header}（可选 id）`, vals);
+      }
       if (c.suggest) {
         const vals = [...new Set(store.collections[def.key].items.map((it) => P.getPath(it.obj, c.field)).filter((v) => v != null && v !== ''))];
         add(`suggest:${def.key}:${c.field}`, `${c.header}（已有）`, vals);
@@ -99,6 +109,7 @@ function exportWorkbook(store, profile, options = {}) {
     if (c.type === 'enum') return listRef(`enum:${c.enum}`);
     if (c.type === 'bool') return listRef('bool');
     if (c.suggest) return listRef(`suggest:${def.key}:${c.field}`);
+    if (c.type === 'ref') return listRef(`ref:${c.collection}:${JSON.stringify(c.where || {})}`);
     return null;
   };
 
@@ -118,7 +129,7 @@ function exportWorkbook(store, profile, options = {}) {
     extra.push({ header: SPECIAL.other, width: 30, wrap: true });
     const rows = col.items.map((it) => {
       const r = def.columns.map((c) => {
-        const v = P.getPath(it.obj, c.field);
+        const v = P.fieldValue(c, it.obj);
         // 「留空 = 用 id 当行为名」，所以没有行为的项要明确写「无」，否则再导入会被补上行为
         if (c.type === 'behaviour' && (v === undefined || v === null || v === '') && def.newBehaviour === 'id') return '无';
         return P.formatCell(c, v, enums);
@@ -134,10 +145,10 @@ function exportWorkbook(store, profile, options = {}) {
     sheets.push({ name: def.label, columns: [...columns, ...extra], rows, autoFilter: true, freezeCols: 2, tabSelected: sheets.length === 0 });
 
     for (const ch of def.children) {
-      const parentHeader = `${def.label}id`;
+      const parentHeader = parentHeaderOf(def, ch);
       const chCols = [
         { header: parentHeader, width: 24, key: true },
-        { header: `${def.label}名`, width: 14, readonly: true },
+        { header: parentNameHeaderOf(def, ch), width: 14, readonly: true },
         { header: SPECIAL.seq, width: 6 },
         ...ch.columns.map((c) => ({ header: c.header, width: c.width, wrap: c.type === 'text', list: listFor(def, c) })),
         { header: SPECIAL.other, width: 30, wrap: true },
@@ -195,7 +206,13 @@ function helpLines(profile) {
       if (def.columns.some((c) => c.field === r.field)) lines.push(`■ 「${def.label}」表：${r.message}。`);
     }
     for (const ch of def.children) {
-      lines.push(`■ 「${ch.sheet}」表：一行一条，用「${def.label}id」对应到${def.label}，「序号」决定先后。某张${def.label}的行全删掉 = 这张${def.label}没有${ch.sheet}。`);
+      const pl = ch.parentLabel || def.label;
+      lines.push(`■ 「${ch.sheet}」表：一行一条，用「${parentHeaderOf(def, ch)}」对应到${pl}，「序号」决定先后。某张${pl}的行全删掉 = 这张${pl}没有${ch.sheet}。`);
+      for (const c of ch.columns.filter((x) => x.type === 'ref')) {
+        lines.push(`■ 「${ch.sheet}」表的「${c.header}」：填 id（「枚举」表里有可选的 id）${c.where ? `，只能填${Object.entries(c.where).map(([k, v]) => `${k} 为 ${v}`).join('、')}的项` : ''}。`);
+      }
+      if (ch.sum) lines.push(`■ 「${ch.sheet}」表：${ch.sum.message}。`);
+      for (const mp of ch.matchParent || []) lines.push(`■ 「${ch.sheet}」表：${mp.message}。`);
     }
   }
   lines.push('');
@@ -308,7 +325,7 @@ function planImport(store, profile, sheets, options = {}) {
         const exportedFrom = item ? (baseOf(id) || item.obj) : null;
         const untouched = (c, raw) => {
           if (!exportedFrom) return false;
-          let shown = P.formatCell(c, P.getPath(exportedFrom, c.field), enums);
+          let shown = P.formatCell(c, P.fieldValue(c, exportedFrom), enums);
           if (c.type === 'behaviour' && (shown === null || shown === '') && def.newBehaviour === 'id') shown = '无';
           return cellStr(raw) === cellStr(shown);
         };
@@ -415,9 +432,9 @@ function planImport(store, profile, sheets, options = {}) {
       if (!cs) continue;
       plan.sheetsUsed.push(cs.name);
       const hm = headerMap(cs.rows[0]);
-      const parentHeader = `${def.label}id`;
+      const parentHeader = parentHeaderOf(def, ch);
       if (!hm.has(parentHeader)) { err(cs.name, 1, `找不到「${parentHeader}」列，这张表没法导入`); continue; }
-      const known = new Set([parentHeader, `${def.label}名`, SPECIAL.seq, SPECIAL.other, ...ch.columns.map((c) => c.header)]);
+      const known = new Set([parentHeader, parentNameHeaderOf(def, ch), SPECIAL.seq, SPECIAL.other, ...ch.columns.map((c) => c.header)]);
       for (const h of hm.keys()) if (!known.has(h)) warn(cs.name, 1, `不认识的列「${h}」，已忽略`);
       const groups = new Map();
       cs.rows.slice(1).forEach((r, i) => {
@@ -474,12 +491,16 @@ function planImport(store, profile, sheets, options = {}) {
         });
         if (bad) continue;
 
-        if (pd && pd.type === 'add') { pd.obj[ch.field] = arr; continue; }
+        if (pd && pd.type === 'add') {
+          if (arr.length || ch.default !== undefined) pd.obj[ch.field] = arr;
+          continue;
+        }
         const baseObj = baseOf(pid);
         const res = merge3(ch.sheet, arr, baseObj ? (P.getPath(baseObj, ch.field) || []) : undefined, curArr, pid, cs.name, rows[0]?.rowNo);
         if (!res || res.conflict) continue;
         const target = pd || { type: 'same', item, obj: clone(item.obj), fields: [], sheet: cs.name };
-        target.obj[ch.field] = res.value;
+        if (!res.value.length && ch.default === undefined) delete target.obj[ch.field];
+        else target.obj[ch.field] = res.value;
         target.fields.push({ header: ch.sheet, from: curArr, to: res.value, child: ch });
         if (target.type === 'same') target.type = 'update';
         pending.set(pid, target);
@@ -506,15 +527,16 @@ function planImport(store, profile, sheets, options = {}) {
       let obj;
       if (pd.type === 'add') obj = P.orderKeys(pd.obj, def.fieldOrder);
       else if (pd.obj) obj = P.orderKeys(pd.obj, Object.keys(pd.item.obj));
-      if (obj) {
-        const broken = P.checkRules(def.rules, obj);
-        if (broken.length) {
-          for (const r of broken) err(pd.sheet, pd.rowNo, `「${id}」${r.message}`);
-          continue;
-        }
-      }
-      plan.changes.push({ collection: def.key, label: def.label, def, id, type: pd.type, fields: pd.fields, obj, item: pd.item, file: pd.file || null });
+      plan.changes.push({ collection: def.key, label: def.label, def, id, type: pd.type, fields: pd.fields, obj, item: pd.item, file: pd.file || null, sheet: pd.sheet, rowNo: pd.rowNo });
     }
+  }
+
+  // 最后按「改完之后」的全貌校验每一项改动：规则、引用、合计、和父项一致。
+  // 放在所有集合都处理完之后，这样同一次导入里新加的状态 / 形态牌也算数
+  const view = finalView(store, plan.changes);
+  for (const ch of plan.changes) {
+    if (ch.type === 'delete') continue;
+    for (const p of checkItem(ch.def, ch.obj, view)) err(ch.sheet, ch.rowNo, `「${ch.id}」${p.message}`);
   }
   return plan;
 }

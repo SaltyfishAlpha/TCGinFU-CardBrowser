@@ -386,6 +386,7 @@
     'deck-missing-card': ['卡组引用了不存在的卡', ''],
     'intent-missing': ['意图池引用了不存在的意图', ''],
     'rule': ['不符合内容包规则', '引擎加载时会报错或忽略的写法（规则来自 profile.json 的 rules，与 ContentLoader 一致）。'],
+    'form-in-main': ['形态牌放进了主卡组', '形态牌只能出现在升变牌的形态卡组里（规则书 §3.1）。'],
     'no-behaviour-id': ['没有 behaviourId', '只有数据效果的卡。通常没问题，列出来供核对。'],
     'behaviour-pending': ['Lua 待实现', '卡牌表导入时生成了占位，等 agent 按卡面实现。任务单在 dist/agent-tasks.md。'],
     'not-in-deck': ['不在任何卡组里', '可能是备选卡，也可能是漏放了。'],
@@ -480,7 +481,8 @@
     if (c.hero) kv.push(['英雄技能', '是']);
     if (c.targeting) kv.push(['指定目标', lab(L.cardTargeting, c.targeting)]);
     if (c.chargeOptions) kv.push(['可选充能', c.chargeOptions.join(' / ')]);
-    if (c.formId) kv.push(['所属形态', c.formId]);
+    if (c.ranged) kv.push(['远程', '是']);
+    if (c.requiresBackRow) kv.push(['需在后排', '是']);
     if (c.armorBaseShield != null) kv.push(['基础护盾', `${c.armorBaseShield}${c.shieldKind ? ' ' + lab(L.shieldKind, c.shieldKind) : ''}`]);
     if (c.weaponBaseDamage != null) kv.push(['基础伤害', c.weaponBaseDamage]);
     if (c.twoHanded != null) kv.push(['双手', c.twoHanded ? '是' : '否']);
@@ -495,6 +497,7 @@
         <section class="box"><h3>数据效果（引擎直接执行）</h3>${c.effectTexts.length ? `<ul class="plain">${c.effectTexts.map((t) => `<li>${esc(t)}</li>`).join('')}</ul>` : '<div style="color:var(--muted)">没有数据效果，全部靠 Lua 行为</div>'}</section>
         ${b ? behaviourSection(b) : `<section class="box"><h3>Lua 行为</h3><div style="color:var(--muted)">${c.luaPending ? `待实现：占位在 <span class="mono">${esc(c.luaPending.file)}:${c.luaPending.line}</span>` : c.behaviourId ? `指向「${esc(c.behaviourId)}」，但 Lua 里没有这个行为` : '这张卡没有 Lua 行为'}</div></section>`}
         ${issuesSection(cardIssues(c))}
+        ${c.formDeck ? `<section class="box"><h3>形态卡组（${c.formDeck.reduce((a, f) => a + f.count, 0)} 张）</h3><ul class="plain">${c.formDeck.map((f) => `<li>${cardById.has(f.card) ? entityLink('card', f.card, cardById.get(f.card).name) : `<span style="color:var(--err)">找不到「${esc(f.card)}」</span>`} ×${f.count}</li>`).join('')}</ul></section>` : ''}
         <section class="box"><h3>所在卡组</h3>${decks ? `<ul class="plain">${decks}</ul>` : '<div style="color:var(--muted)">不在任何卡组里</div>'}</section>
         ${unm.length ? `<section class="box"><h3>迁移遗留字段（引擎不读）</h3><dl class="kv">${unm.map(([k, v]) => `<div><dt class="mono">${esc(k)}</dt><dd class="mono" style="font-weight:400">${esc(JSON.stringify(v))}</dd></div>`).join('')}</dl></section>` : ''}`,
     };

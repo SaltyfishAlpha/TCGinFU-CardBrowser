@@ -4,33 +4,43 @@
   "manifest": "pack.json",
 
   "enums": {
-    "category": { "Class": "职业牌", "Armor": "防具", "Weapon": "武器", "Treasure": "宝物" },
+    "category": { "Class": "职业牌", "Armor": "防具", "Weapon": "武器", "Treasure": "秘宝" },
     "$comment_play": "规则书 §7.1（2026-11-23 修订）：打法只有三种；升变牌 / 形态牌是打法之外的标记，见 role",
     "play": { "Skill": "技能", "Timing": "时机", "Continuous": "持续" },
     "role": { "Transform": "升变牌", "Form": "形态牌" },
     "cardTargeting": { "Auto": "自动", "None": "不指定", "Enemy": "敌人", "Ally": "队友" },
+    "$comment_enums": "下面的枚举值与引擎 C# 枚举逐一对齐（Core/Primitives/Enums.cs、Cards/*.cs、Battle/Enemy.cs，2026-11-23）",
     "color": { "Might": "力量", "Dexterity": "敏捷", "Insight": "洞察", "Willpower": "意志" },
     "element": {
-      "Physical": "物理", "Dark": "暗", "Light": "光", "Fire": "火", "Ice": "冰", "Lightning": "雷",
-      "Wind": "风", "Earth": "地", "Poison": "毒", "Arcane": "奥术"
+      "Physical": "物理", "Wind": "风", "Lightning": "雷", "Dark": "暗", "Earth": "地", "Fire": "火",
+      "Ice": "冰", "Light": "光", "Poison": "毒"
     },
-    "shieldKind": { "Physical": "物理", "Magical": "魔法", "Universal": "全能" },
+    "shieldKind": { "Physical": "物理", "Magical": "魔法" },
     "target": {
-      "SingleEnemy": "单个敌人", "AllEnemies": "全体敌人", "Self": "自己", "SingleAlly": "单个队友",
-      "AllAllies": "全体队友"
+      "Self": "自己", "SingleEnemy": "单个敌人", "AllEnemies": "全体敌人", "FrontRowEnemies": "敌方前排",
+      "BackRowEnemies": "敌方后排", "SingleAlly": "单个队友", "AllAllies": "全体队友", "AdjacentAllies": "相邻队友",
+      "CurrentTarget": "当前目标"
     },
     "effectKind": {
       "Damage": "伤害", "Heal": "回复HP", "GainShield": "护盾", "RestoreMp": "回复MP", "GainAp": "获得AP",
       "Draw": "抽牌", "Discard": "弃牌", "GainCharge": "充能", "ApplyStatus": "施加状态", "MoveRow": "换排",
       "GrantFreeMove": "免费换排", "SwapRows": "交换前后排", "Cover": "掩护"
     },
-    "amountSource": { "Flat": "固定值", "FormAttack": "B_atk", "FormDefense": "B_def" },
+    "effectCondition": {
+      "Always": "总是", "OnCrit": "暴击时", "OnSuperCrit": "超暴击时", "IfCasterInCrisis": "自身濒危时",
+      "IfChargeSpent": "消耗了充能时", "IfTargetInCrisis": "目标濒危时"
+    },
+    "amountSource": {
+      "Flat": "固定值", "FormAttack": "B_atk", "FormDefense": "B_def", "WeaponDamage": "武器伤害",
+      "ArmorShield": "防具护盾", "LevelBonus": "等级加成", "CasterTotalLevel": "总等级", "ChargeSpent": "消耗的充能数"
+    },
+    "transformTrigger": { "Conditional": "条件型", "Immediate": "立即型" },
     "row": { "Front": "前排", "Back": "后排" },
-    "rank": { "Boss": "首领", "Normal": "普通" },
-    "affinity": { "Vulnerable": "弱", "Resistant": "抗", "Immune": "免疫", "Absorb": "吸收" },
+    "rank": { "Normal": "普通", "Elite": "精英", "Boss": "首领" },
+    "affinity": { "Normal": "普通", "Vulnerable": "弱", "Resistant": "抗", "Immune": "免疫", "Absorb": "吸收" },
     "targeting": {
-      "AllPlayers": "我方全体", "DefaultSingle": "单体（默认选取）", "DesignatedRowSingle": "指定排的单体",
-      "FrontRowAoe": "前排全体", "SelfOrNone": "自身 / 无目标", "BackRowAoe": "后排全体"
+      "DefaultSingle": "单体（默认选取）", "FrontRowAoe": "前排全体", "BackRowAoe": "后排全体", "AllPlayers": "我方全体",
+      "DesignatedRowSingle": "指定排的单体", "SelfOrNone": "自身 / 无目标", "HighestHpSingle": "HP 最高的单体"
     },
     "owner": { "$from": { "collection": "characters", "value": "id", "label": "name" } }
   },
@@ -53,40 +63,50 @@
       ],
       "fieldOrder": [
         "id", "name", "owner", "category", "role", "play", "classId", "colors", "ap", "mp", "charge", "chargeOptions",
-        "hasCrit", "hero", "rulesText", "behaviourId", "effects", "formId", "armorBaseShield", "shieldKind",
-        "weaponBaseDamage", "twoHanded", "unmapped", "art", "targeting"
+        "hasCrit", "hero", "ranged", "requiresBackRow", "rulesText", "behaviourId", "effects", "formDeck",
+        "transformTrigger", "transformConditionText", "armorBaseShield", "shieldKind", "weaponBaseDamage", "element",
+        "twoHanded", "unmapped", "art", "backArt", "targeting"
       ],
+      "$comment_rules": "与 ContentLoader 的加载期校验一一对应（2026-11-23：类别 × 打法、形态卡组记在升变牌上、职业只给职业牌）",
       "rules": [
         { "field": "play", "must": "absent", "when": { "role": "Transform" }, "message": "升变牌不按打法结算，「打法」要留空" },
         { "field": "play", "must": "present", "unless": { "role": "Transform" }, "message": "除了升变牌，每张牌都要填「打法」（技能 / 时机 / 持续）" },
-        { "field": "formId", "must": "present", "when": { "role": "Form" }, "message": "形态牌要填「所属形态」，否则不知道它属于哪一组形态卡组" },
-        { "field": "formId", "must": "absent", "unless": { "role": "Form" }, "message": "只有形态牌才能填「所属形态」" },
+        { "field": "formDeck", "must": "present", "when": { "role": "Transform" }, "message": "升变牌要在「形态卡组」表里列出它的形态牌，没有形态卡组就升不了变" },
+        { "field": "formDeck", "must": "absent", "unless": { "role": "Transform" }, "message": "只有升变牌才有形态卡组" },
+        { "field": "classId", "must": "present", "when": { "category": "Class" }, "message": "职业牌必须填「职业」" },
+        { "field": "classId", "must": "absent", "unless": { "category": "Class" }, "message": "武器 / 防具 / 秘宝牌不带职业，「职业」要留空" },
+        { "field": "formId", "must": "absent", "message": "formId 已废弃（形态卡组改记在升变牌的 formDeck 上），引擎不再读它" },
         { "field": "kind", "must": "absent", "message": "kind 字段已废弃（2026-11-23 拆成「打法」和「标记」），引擎不再读它" }
       ],
       "columns": [
         { "field": "id", "header": "id", "type": "id", "width": 24, "pattern": "^[a-z][a-z0-9_]*$" },
         { "field": "name", "header": "卡名", "type": "string", "required": true, "width": 16 },
         { "field": "owner", "header": "角色", "type": "enum", "enum": "owner", "required": true, "width": 9 },
-        { "field": "classId", "header": "职业", "type": "string", "suggest": true, "width": 10 },
         { "field": "category", "header": "类别", "type": "enum", "enum": "category", "required": true, "width": 9 },
+        { "field": "classId", "header": "职业", "type": "string", "suggest": true, "width": 10, "blankMeans": "不带职业（武器 / 防具 / 秘宝牌）" },
         { "field": "role", "header": "标记", "type": "enum", "enum": "role", "width": 9, "blankMeans": "普通牌" },
-        { "field": "play", "header": "打法", "type": "enum", "enum": "play", "width": 8 },
-        { "field": "colors", "header": "颜色", "type": "list", "enum": "color", "default": [], "width": 12 },
+        { "field": "play", "header": "打法", "type": "enum", "enum": "play", "width": 8, "blankMeans": "无打法（只有升变牌可以这样）" },
+        { "field": "colors", "header": "颜色", "type": "list", "enum": "color", "default": [], "maxItems": 2, "width": 12 },
         { "field": "ap", "header": "AP", "type": "int", "default": 0, "width": 6 },
         { "field": "mp", "header": "MP", "type": "int", "default": 0, "width": 6 },
         { "field": "charge", "header": "充能", "type": "int", "default": 0, "width": 6 },
         { "field": "chargeOptions", "header": "可选充能", "type": "list", "itemType": "int", "separator": ",", "width": 9 },
         { "field": "hasCrit", "header": "暴击", "type": "bool", "default": false, "width": 6 },
         { "field": "hero", "header": "英雄技能", "type": "bool", "width": 8 },
+        { "field": "ranged", "fallback": "unmapped.ranged", "header": "远程", "type": "bool", "width": 6 },
+        { "field": "requiresBackRow", "fallback": "unmapped.requires_back_row", "header": "需在后排", "type": "bool", "width": 8 },
         { "field": "targeting", "header": "指定目标", "type": "enum", "enum": "cardTargeting", "width": 9 },
         { "field": "rulesText", "header": "卡面文字", "type": "text", "required": true, "width": 60 },
         { "field": "behaviourId", "header": "Lua行为", "type": "behaviour", "width": 22 },
-        { "field": "formId", "header": "所属形态", "type": "string", "width": 12 },
+        { "field": "transformTrigger", "header": "升变方式", "type": "enum", "enum": "transformTrigger", "width": 9 },
+        { "field": "transformConditionText", "header": "升变条件", "type": "text", "width": 24 },
         { "field": "armorBaseShield", "header": "基础护盾", "type": "int", "width": 8 },
         { "field": "shieldKind", "header": "护盾类型", "type": "enum", "enum": "shieldKind", "width": 9 },
         { "field": "weaponBaseDamage", "header": "基础伤害", "type": "int", "width": 8 },
+        { "field": "element", "header": "武器属性", "type": "enum", "enum": "element", "width": 8 },
         { "field": "twoHanded", "header": "双手", "type": "bool", "width": 6 },
-        { "field": "art", "header": "卡图", "type": "string", "width": 22 }
+        { "field": "art", "header": "卡图", "type": "string", "width": 22 },
+        { "field": "backArt", "header": "卡背", "type": "string", "width": 16 }
       ],
       "children": [
         {
@@ -96,17 +116,41 @@
           "columns": [
             { "field": "kind", "header": "效果", "type": "enum", "enum": "effectKind", "required": true, "width": 10 },
             { "field": "amount.source", "header": "数值来源", "type": "enum", "enum": "amountSource", "width": 10 },
-            { "field": "amount.add", "header": "数值", "type": "number", "width": 7 },
+            { "field": "amount.add", "header": "数值", "type": "int", "width": 7 },
             { "field": "amount.times", "header": "次数", "type": "int", "width": 6 },
+            { "field": "amount.dividedBy", "header": "除以", "type": "int", "width": 6 },
             { "field": "element", "header": "属性", "type": "enum", "enum": "element", "width": 8 },
             { "field": "target", "header": "目标", "type": "enum", "enum": "target", "width": 10 },
             { "field": "shieldKind", "header": "护盾类型", "type": "enum", "enum": "shieldKind", "width": 9 },
+            { "field": "statusId", "header": "状态", "type": "ref", "collection": "statuses", "width": 16 },
+            { "field": "duration", "header": "持续轮数", "type": "int", "width": 8 },
+            { "field": "condition", "header": "条件", "type": "enum", "enum": "effectCondition", "width": 11 },
+            { "field": "rollsOwnCrit", "header": "单独掷暴击", "type": "bool", "width": 9 },
+            { "field": "rowTarget", "header": "移到", "type": "enum", "enum": "row", "width": 6 },
+            { "field": "slotTarget", "header": "落点槽位", "type": "int", "width": 8 },
+            { "field": "mustChangeRow", "header": "必须换排", "type": "bool", "width": 8 },
             { "field": "playerChoosesSlot", "header": "排内自选", "type": "bool", "width": 8 }
+          ],
+          "checks": [
+            { "field": "amount.times", "notEqual": 0, "message": "「次数」不能为 0" },
+            { "field": "amount.dividedBy", "min": 1, "message": "「除以」必须是正整数" }
           ]
+        },
+        {
+          "field": "formDeck",
+          "sheet": "形态卡组",
+          "parentLabel": "升变牌",
+          "columns": [
+            { "field": "card", "header": "形态牌", "type": "ref", "collection": "cards", "where": { "role": "Form" }, "required": true, "width": 24 },
+            { "field": "count", "header": "张数", "type": "int", "default": 1, "width": 6 }
+          ],
+          "sum": { "field": "count", "default": 1, "equals": 10, "message": "形态卡组合计必须是 10 张" },
+          "matchParent": [{ "field": "classId", "message": "形态牌的职业要和它所在升变牌一致" }]
         }
       ],
       "references": [
-        { "collection": "decks", "paths": ["main[].card", "formDecks[].transformCard", "formDecks[].cards[].card"] },
+        { "collection": "decks", "paths": ["main[].card"] },
+        { "collection": "cards", "paths": ["formDeck[].card"] },
         { "collection": "characters", "paths": ["weaponCardId", "armorCardId"] }
       ]
     },
@@ -123,8 +167,9 @@
       "editable": true,
       "newFile": [{ "file": "statuses.json" }],
       "fieldOrder": [
-        "id", "name", "rulesText", "incomingDamageBonus", "outgoingDamageBonus", "vulnerableElement", "critResistDelta",
-        "incomingMultiplier", "consumedOnTrigger", "negative", "behaviourId"
+        "id", "name", "rulesText", "damagePerRound", "healPerRound", "dotElement", "incomingDamageBonus",
+        "incomingDamageReduction", "outgoingDamageBonus", "vulnerableElement", "critResistDelta", "incomingMultiplier",
+        "consumedOnTrigger", "negative", "behaviourId"
       ],
       "columns": [
         { "field": "id", "header": "id", "type": "id", "width": 24, "pattern": "^[a-z][a-z0-9_]*$" },
@@ -133,7 +178,11 @@
         { "field": "behaviourId", "header": "Lua行为", "type": "behaviour", "width": 24 },
         { "field": "negative", "header": "负面", "type": "bool", "width": 6 },
         { "field": "consumedOnTrigger", "header": "触发后消耗", "type": "bool", "width": 9 },
+        { "field": "damagePerRound", "header": "每轮伤害", "type": "int", "width": 8 },
+        { "field": "dotElement", "header": "持续伤害属性", "type": "enum", "enum": "element", "width": 10 },
+        { "field": "healPerRound", "header": "每轮回复", "type": "int", "width": 8 },
         { "field": "incomingDamageBonus", "header": "受伤加成", "type": "int", "width": 8 },
+        { "field": "incomingDamageReduction", "header": "受伤减免", "type": "int", "width": 8 },
         { "field": "outgoingDamageBonus", "header": "伤害加成", "type": "int", "width": 8 },
         { "field": "vulnerableElement", "header": "易损属性", "type": "enum", "enum": "element", "width": 8 },
         { "field": "critResistDelta", "header": "暴击抵抗变化", "type": "int", "width": 10 },

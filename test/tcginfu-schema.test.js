@@ -81,39 +81,97 @@ test('表头是「标记」「打法」，没有旧的「种类」；原样往�
   assert.strictEqual(result.writes.length, 0);
 });
 
-test('新形态牌：写 role + play + formId，放进 cards/forms.json，占位进 scripts/forms.lua', () => {
+test('新升变牌 + 它的新形态牌一次导入：形态卡组写在升变牌上，形态牌进 forms.json，都不带 formId', () => {
   const dir = fresh();
-  const sheets = sheetsAfter(dir, (b) => b.add('卡牌', { id: 'parry_form', 卡名: '形态格挡', ...BASE, 标记: '形态牌', 打法: '时机', 所属形态: 'blade' }));
+  const sheets = sheetsAfter(dir, (b) => {
+    b.add('卡牌', { id: 'parry_form', 卡名: '形态格挡', ...BASE, 标记: '形态牌', 打法: '时机' });
+    b.add('卡牌', { id: 'storm_stance', 卡名: '风暴架势', ...BASE, 标记: '升变牌' });
+    b.add('形态卡组', { 升变牌id: 'storm_stance', 序号: 1, 形态牌: 'parry_form', 张数: 6 });
+    b.add('形态卡组', { 升变牌id: 'storm_stance', 序号: 2, 形态牌: 'form_hit', 张数: 4 });
+  });
   const { plan } = run(dir, sheets, true);
   assert.deepStrictEqual(plan.errors, []);
   const forms = JSON.parse(fs.readFileSync(path.join(dir, 'cards/forms.json'), 'utf8')).cards;
   const c = forms.find((x) => x.id === 'parry_form');
   assert.strictEqual(c.role, 'Form');
   assert.strictEqual(c.play, 'Timing');
-  assert.strictEqual(c.formId, 'blade');
-  assert.ok(!('kind' in c));
+  assert.ok(!('formId' in c) && !('kind' in c) && !('formDeck' in c), '形态牌上不该有 formId / kind / formDeck');
   assert.deepStrictEqual(Object.keys(c).slice(0, 6), ['id', 'name', 'owner', 'category', 'role', 'play']);
+  const all = JSON.parse(fs.readFileSync(path.join(dir, 'cards/hero.json'), 'utf8')).cards;
+  const t = all.find((x) => x.id === 'storm_stance');
+  assert.deepStrictEqual(t.formDeck, [{ card: 'parry_form', count: 6 }, { card: 'form_hit', count: 4 }]);
+  assert.ok(!('play' in t));
   const pack = JSON.parse(fs.readFileSync(path.join(dir, 'pack.json'), 'utf8'));
   assert.ok(pack.cards.includes('cards/forms.json') && pack.scripts.includes('scripts/forms.lua'));
   assert.match(fs.readFileSync(path.join(dir, 'scripts/forms.lua'), 'utf8'), /-- behaviour\("parry_form"/);
 });
 
-test('内容包规则：升变牌不能有打法、普通牌必须有打法、formId 只给形态牌', () => {
+test('内容包规则：打法、形态卡组、职业的两个方向都拦', () => {
   const dir = fresh();
   const sheets = sheetsAfter(dir, (b) => {
     b.add('卡牌', { id: 'bad_transform', 卡名: '坏升变', ...BASE, 标记: '升变牌', 打法: '技能' });
     b.add('卡牌', { id: 'no_play', 卡名: '没打法', ...BASE });
-    b.add('卡牌', { id: 'stray_form_id', 卡名: '乱填形态', ...BASE, 打法: '技能', 所属形态: 'blade' });
-    b.add('卡牌', { id: 'form_no_id', 卡名: '缺形态', ...BASE, 标记: '形态牌', 打法: '技能' });
-    b.add('卡牌', { id: 'good_transform', 卡名: '好升变', ...BASE, 标记: '升变牌' });
+    b.add('卡牌', { id: 'transform_no_deck', 卡名: '缺形态卡组', ...BASE, 标记: '升变牌' });
+    b.add('卡牌', { id: 'class_no_class', 卡名: '缺职业', ...BASE, 职业: null, 打法: '技能' });
+    b.add('卡牌', { id: 'weapon_with_class', 卡名: '带职业的武器', ...BASE, 类别: '武器', 打法: '技能' });
+    b.add('卡牌', { id: 'normal_with_deck', 卡名: '普通牌带形态卡组', ...BASE, 打法: '技能' });
+    b.add('形态卡组', { 升变牌id: 'normal_with_deck', 形态牌: 'form_hit', 张数: 10 });
+    b.add('卡牌', { id: 'three_colors', 卡名: '三色', ...BASE, 打法: '技能', 颜色: '力量+敏捷+洞察' });
+    b.add('卡牌', { id: 'good_weapon', 卡名: '好武器', ...BASE, 类别: '武器', 职业: null, 打法: '技能' });
   });
   const { plan } = run(dir, sheets);
   const msg = (id) => plan.errors.filter((e) => e.message.includes(id)).map((e) => e.message).join(' ');
   assert.match(msg('bad_transform'), /升变牌不按打法结算/);
   assert.match(msg('no_play'), /都要填「打法」/);
-  assert.match(msg('stray_form_id'), /只有形态牌才能填/);
-  assert.match(msg('form_no_id'), /要填「所属形态」/);
-  assert.strictEqual(msg('good_transform'), '');
+  assert.match(msg('transform_no_deck'), /形态卡组/);
+  assert.match(msg('class_no_class'), /职业牌必须填「职业」/);
+  assert.match(msg('weapon_with_class'), /不带职业/);
+  assert.match(msg('normal_with_deck'), /只有升变牌才有形态卡组/);
+  assert.match(plan.errors.map((e) => e.message).join(' '), /「颜色」最多 2 项/);
+  assert.strictEqual(msg('good_weapon'), '');
+});
+
+test('形态卡组校验：合计 10 张、只能放形态牌、职业要和升变牌一致、引用要存在', () => {
+  const dir = fresh();
+  const sheets = sheetsAfter(dir, (b) => {
+    b.add('卡牌', { id: 'other_class_form', 卡名: '别的职业的形态牌', ...BASE, 职业: '法师', 标记: '形态牌', 打法: '技能' });
+    for (const [tid, rows] of Object.entries({
+      t_short: [['form_hit', 9]],
+      t_not_form: [['form_hit', 9], ['strike', 1]],
+      t_other_class: [['form_hit', 9], ['other_class_form', 1]],
+      t_missing: [['form_hit', 9], ['ghost_card', 1]],
+    })) {
+      b.add('卡牌', { id: tid, 卡名: tid, ...BASE, 标记: '升变牌' });
+      rows.forEach(([card, n], i) => b.add('形态卡组', { 升变牌id: tid, 序号: i + 1, 形态牌: card, 张数: n }));
+    }
+  });
+  const { plan } = run(dir, sheets);
+  const msg = (id) => plan.errors.filter((e) => e.message.includes(`「${id}」`)).map((e) => e.message).join(' ');
+  assert.match(msg('t_short'), /合计必须是 10 张（现在是 9 张）/);
+  assert.match(msg('t_not_form'), /「strike」不符合要求/);
+  assert.match(msg('t_other_class'), /职业要和它所在升变牌一致/);
+  assert.match(msg('t_missing'), /「ghost_card」不存在/);
+});
+
+test('删除保护：被升变牌的形态卡组引用的形态牌不能删', () => {
+  const dir = fresh();
+  const sheets = sheetsAfter(dir, (b) => b.set('卡牌', 'form_hit', '删除', '删除'));
+  const { plan } = run(dir, sheets);
+  assert.ok(plan.errors.some((e) => e.message.includes('form_hit') && e.message.includes('剑之架势')));
+});
+
+test('「远程」缺省时读 unmapped.ranged：导出显示得出来，没改不写，改了写到顶层 ranged', () => {
+  const dir = fresh();
+  const sheets0 = sheetsAfter(dir);
+  const s = sheets0.find((x) => x.name === '卡牌');
+  assert.strictEqual(s.rows.find((r) => r[0] === 'strike')[s.rows[0].indexOf('远程')], '是');
+  assert.strictEqual(run(dir, sheets0).plan.changes.length, 0);
+
+  const sheets1 = sheetsAfter(dir, (b) => b.set('卡牌', 'strike', '远程', '否'));
+  const { plan } = run(dir, sheets1, true);
+  assert.deepStrictEqual(plan.errors, []);
+  const strike = JSON.parse(fs.readFileSync(path.join(dir, 'cards/a.json'), 'utf8')).cards.find((c) => c.id === 'strike');
+  assert.strictEqual(strike.ranged, false);
 });
 
 test('可选充能「0,1」→ [0,1]；改已有卡时保持文件里原来的键顺序', () => {
